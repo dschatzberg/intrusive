@@ -1,0 +1,10 @@
+env:
+  - DEBUG=0
+  - DEBUG=1
+install:
+  - curl -s http://www.rust-lang.org/rustup.sh | sudo sh
+script:
+  - cargo build
+  - cargo test
+after_script:
+  - cargo doc

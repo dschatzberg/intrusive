@@ -1,0 +1,5 @@
+[package]
+
+name = "intrusive"
+version = "0.0.1"
+authors = ["Dan Schatzberg <schatzberg.dan@gmail.com>"]
