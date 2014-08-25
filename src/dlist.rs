@@ -515,7 +515,7 @@ impl<'a, T: Node<T>> DoubleEndedIterator<*mut T> for MutItems<'a, T> {
     }
 }
 
-/// Allow mutating the DList while iteratinglist.
+/// Allow mutating the DList while iterating the list.
 pub trait ListInsertion<T> {
     /// Insert `node` just after to the element most recently return by `next()`
     ///
