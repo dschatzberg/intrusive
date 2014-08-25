@@ -31,9 +31,16 @@
 
 pub use dlist::DList;
 
+use core::collections::Collection;
+
 pub mod dlist;
 
-pub trait MutableSeq<T> {
+pub trait Mutable : Collection {
+    /// Clears the container, removing all values.
+    fn clear(&mut self);
+}
+
+pub trait MutableSeq<T> : Mutable {
     /// Appends an element to the back of a collection.
     ///
     /// # Safety Notes

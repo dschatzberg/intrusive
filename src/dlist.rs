@@ -26,7 +26,7 @@ use core::mem;
 use core::prelude::*;
 use core::ptr;
 
-use {Deque, MutableSeq};
+use {Deque, Mutable, MutableSeq};
 
 /// An intrusive doubly-linked list.
 pub struct DList<T> {
@@ -237,6 +237,17 @@ impl<T: Node<T>> Collection for DList<T> {
     }
 }
 
+impl<T: Node<T>> Mutable for DList<T> {
+    #[inline]
+    fn clear(&mut self) {
+        loop {
+            if self.pop_front().is_null() {
+                break
+            }
+        }
+    }
+}
+
 impl<T: Node<T>> MutableSeq<T> for DList<T> {
     #[inline]
     fn push(&mut self, node: *mut T) {
@@ -436,17 +447,6 @@ impl<T: Node<T> + Ord> DList<T> {
     }
 }
 
-#[unsafe_destructor]
-impl<T: Node<T>> Drop for DList<T> {
-    fn drop(&mut self) {
-        loop {
-            if self.pop_front().is_null() {
-                break
-            }
-        }
-    }
-}
-
 impl<'a, T: Node<T>> Iterator<*const T> for Items<'a, T> {
     #[inline]
     fn next(&mut self) -> Option<*const T> {
@@ -621,6 +621,7 @@ mod test {
 
     use Deque as IntrusiveDeque;
     use MutableSeq as IntrusiveMutableSeq;
+    use Mutable as IntrusiveMutable;
     use super::{DList, Links, Node, RawLink};
 
     struct MyNode {
@@ -783,6 +784,7 @@ mod test {
         let mut m = unsafe {list_from(v.as_slice())};
         m.append(unsafe {list_from(u.as_slice())} );
         check_links(&m);
+        m.clear();
     }
 
     #[test]
@@ -814,6 +816,7 @@ mod test {
         let mut m = unsafe {list_from(v.as_slice())};
         m.prepend(unsafe {list_from(u.as_slice())} );
         check_links(&m);
+        m.clear();
     }
 
     #[test]
@@ -839,6 +842,7 @@ mod test {
         m.pop_front(); check_links(&m);
         m.rotate_forward(); check_links(&m);
         m.rotate_backward(); check_links(&m);
+        m.clear();
     }
 
     #[test]
@@ -850,10 +854,11 @@ mod test {
                      MyNode{ list_hook: Links::new(), val: 4},
                      MyNode{ list_hook: Links::new(), val: 5},
                      MyNode{ list_hook: Links::new(), val: 6}];
-        let m = unsafe {list_from(v.as_slice())};
+        let mut m = unsafe {list_from(v.as_slice())};
         for (i, elt) in m.iter().enumerate() {
             assert_eq!(i as int, unsafe {(*elt).val});
         }
+        m.clear();
         let mut n = DList::new();
         assert_eq!(n.iter().next(), None)
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
@@ -864,7 +869,7 @@ mod test {
             assert_eq!(it.next().unwrap(), v4 as *const MyNode);
             assert_eq!(it.next(), None)
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
@@ -887,7 +892,7 @@ mod test {
             assert_eq!(it.next_back(), jt.next_back());
             assert_eq!(it.next(), jt.next());
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
@@ -911,7 +916,7 @@ mod test {
             assert_eq!(it.next_back(), None);
             assert_eq!(it.next(), None);
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
@@ -923,10 +928,11 @@ mod test {
                      MyNode{ list_hook: Links::new(), val: 4},
                      MyNode{ list_hook: Links::new(), val: 5},
                      MyNode{ list_hook: Links::new(), val: 6}];
-        let m = unsafe {list_from(v.as_slice())};
+        let mut m = unsafe {list_from(v.as_slice())};
         for (i, elt) in m.iter().rev().enumerate() {
             assert_eq!((6 - i) as int, unsafe {(*elt).val});
         }
+        m.clear();
         let mut n = DList::new();
         assert_eq!(n.iter().rev().next(), None);
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
@@ -937,7 +943,7 @@ mod test {
             assert_eq!(it.next().unwrap(), v4 as *const MyNode);
             assert_eq!(it.next(), None);
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
@@ -956,6 +962,7 @@ mod test {
             len -= 1;
         }
         assert_eq!(len, 0);
+        m.clear();
         let mut n = DList::new();
         assert!(n.mut_iter().next().is_none());
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
@@ -970,7 +977,7 @@ mod test {
             assert!(it.next().is_some());
             assert!(it.next().is_none());
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
@@ -994,7 +1001,7 @@ mod test {
             assert!(it.next_back().is_none());
             assert!(it.next().is_none());
         }
-        mem::drop(n);
+        n.clear();
     }
 
     #[test]
