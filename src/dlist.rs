@@ -531,7 +531,11 @@ impl<'a, T: Node<T>> ListInsertion<T> for MutItems<'a, T> {
     #[inline]
     fn insert_next(&mut self, node: *mut T) {
         assert!(node.is_not_null());
-        DList::insert_before(self.head, RawLink::some(node));
+        if self.head.is_none() {
+            self.list.push_front(node);
+        } else {
+            DList::insert_before(self.head, RawLink::some(node));
+        }
     }
 
     #[inline]
