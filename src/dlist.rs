@@ -97,7 +97,6 @@ impl<'a, T> Clone for Items<'a, T> {
 pub struct MutItems<'a, T: Node<T>> {
     head: RawLink<T>,
     tail: RawLink<T>,
-    #[allow(dead_code)]
     list: &'a mut DList<T>,
 }
 
@@ -538,6 +537,24 @@ impl<'a, T: Node<T>> ListInsertion<T> for MutItems<'a, T> {
     #[inline]
     fn peek_next(&mut self) -> *mut T {
         self.head.as_mut_ptr()
+    }
+}
+
+/// Allow removing from the DList while iterating the list.
+pub trait ListRemoval<T> {
+    /// Remove the last node returned by `next()`
+    fn remove_next(&mut self) -> *mut T;
+}
+
+impl<'a, T: Node<T>> ListRemoval<T> for MutItems<'a, T> {
+    #[inline]
+    fn remove_next(&mut self) -> *mut T{
+        if self.head.is_none() {
+            ptr::mut_null()
+        } else {
+            self.list.remove_link(self.head.prev());
+            self.head.prev().as_mut_ptr()
+        }
     }
 }
 
