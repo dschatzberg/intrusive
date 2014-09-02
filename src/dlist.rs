@@ -94,7 +94,7 @@ impl<'a, T> Clone for Items<'a, T> {
 }
 
 // /// An iterator over mutable references to the items of a `DList`
-pub struct MutItems<'a, T: Node<T>> {
+pub struct MutItems<'a, T: 'a + Node<T>> {
     head: RawLink<T>,
     tail: RawLink<T>,
     list: &'a mut DList<T>,
