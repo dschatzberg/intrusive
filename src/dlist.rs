@@ -26,8 +26,6 @@ use core::mem;
 use core::prelude::*;
 use core::ptr;
 
-use {Deque, Mutable, MutableSeq};
-
 /// An intrusive doubly-linked list.
 pub struct DList<T> {
     head: RawLink<T>,
@@ -37,19 +35,12 @@ struct RawLink<T> {
     ptr: *mut T
 }
 
+impl<T> Copy for RawLink<T> {}
+
 /// Links allowing a struct to be inserted into a `Dlist`
 pub struct Links<T> {
     next: RawLink<T>,
     prev: RawLink<T>
-}
-
-#[unsafe_destructor]
-impl<T: Node<T>> Drop for Links<T> {
-    #[inline]
-    fn drop(&mut self) {
-        assert!(self.next.is_none());
-        assert!(self.prev.is_none());
-    }
 }
 
 /// A trait that allows a struct to be inserted into a `Dlist`
@@ -60,22 +51,18 @@ pub trait Node<T> {
     /// Getter for mutable links
     fn list_hook_mut<'a>(&'a mut self) -> &'a mut Links<T>;
 
-    #[allow(visible_private_types)]
     fn next(&self) -> RawLink<T> {
         self.list_hook().next
     }
 
-    #[allow(visible_private_types)]
     fn next_mut<'a>(&'a mut self) -> &'a mut RawLink<T> {
         &mut self.list_hook_mut().next
     }
 
-    #[allow(visible_private_types)]
     fn prev(&self) -> RawLink<T> {
         self.list_hook().prev
     }
 
-    #[allow(visible_private_types)]
     fn prev_mut<'a>(&'a mut self) -> &'a mut RawLink<T> {
         &mut self.list_hook_mut().prev
     }
@@ -87,6 +74,8 @@ pub struct Items<'a, T> {
     tail: RawLink<T>,
     lifetime: ContravariantLifetime<'a>
 }
+
+impl<'a, T> Copy for Items<'a, T> { }
 
 impl<'a, T> Clone for Items<'a, T> {
     #[inline]
@@ -114,7 +103,7 @@ impl<T: Node<T>> Links<T> {
 impl<T: Node<T>> RawLink<T> {
     /// Like Option::None for RawLink
     fn none() -> RawLink<T> {
-        RawLink{ptr: ptr::mut_null()}
+        RawLink{ptr: ptr::null_mut()}
     }
 
     /// Like Option::Some for RawLink
@@ -184,17 +173,17 @@ impl<T: Node<T>> DList<T> {
         self.front_link().map(|t| t.prev())
     }
 
-    fn insert_after(prev: RawLink<T>, node: RawLink<T>) {
+    unsafe fn insert_after(prev: RawLink<T>, node: RawLink<T>) {
         let next = prev.next();
         DList::insert(prev, next, node);
     }
 
-    fn insert_before(next: RawLink<T>, node: RawLink<T>) {
+    unsafe fn insert_before(next: RawLink<T>, node: RawLink<T>) {
         let prev = next.prev();
         DList::insert(prev, next, node);
     }
 
-    fn insert(mut prev: RawLink<T>,
+    unsafe fn insert(mut prev: RawLink<T>,
               mut next: RawLink<T>,
               mut node: RawLink<T>) {
         *next.prev_mut() = node;
@@ -218,9 +207,7 @@ impl<T: Node<T>> DList<T> {
         *node.next_mut() = RawLink::none();
         *node.prev_mut() = RawLink::none();
     }
-}
 
-impl<T: Node<T>> Collection for DList<T> {
     #[inline]
     fn is_empty(&self) -> bool {
         self.head.is_none()
@@ -234,9 +221,7 @@ impl<T: Node<T>> Collection for DList<T> {
         }
         v
     }
-}
 
-impl<T: Node<T>> Mutable for DList<T> {
     #[inline]
     fn clear(&mut self) {
         loop {
@@ -245,15 +230,13 @@ impl<T: Node<T>> Mutable for DList<T> {
             }
         }
     }
-}
 
-impl<T: Node<T>> MutableSeq<T> for DList<T> {
     #[inline]
-    fn push(&mut self, node: *mut T) {
-        assert!(node.is_not_null());
+    unsafe fn push(&mut self, node: *mut T) {
+        debug_assert!(node.is_not_null());
         if self.head.is_none() {
-            *unsafe{ (*node).next_mut() } = RawLink::some(node);
-            *unsafe{ (*node).prev_mut() } = RawLink::some(node);
+            *(*node).next_mut() = RawLink::some(node);
+            *(*node).prev_mut() = RawLink::some(node);
             self.head = RawLink::some(node);
         } else {
             DList::insert_after(self.back_link(), RawLink::some(node))
@@ -263,16 +246,14 @@ impl<T: Node<T>> MutableSeq<T> for DList<T> {
     #[inline]
     fn pop(&mut self) -> *mut T {
         if self.head.is_none() {
-            ptr::mut_null()
+            ptr::null_mut()
         } else {
             let back = self.back_link();
             self.remove_link(back);
             back.as_mut_ptr()
         }
     }
-}
 
-impl<T: Node<T>> Deque<T> for DList<T> {
     #[inline]
     fn front(&self) -> *const T {
         self.front_link().as_ptr()
@@ -294,10 +275,10 @@ impl<T: Node<T>> Deque<T> for DList<T> {
     }
 
     #[inline]
-    fn push_front(&mut self, node: *mut T) {
+    unsafe fn push_front(&mut self, node: *mut T) {
         if self.head.is_none() {
-            *unsafe{ (*node).next_mut() } = RawLink::some(node);
-            *unsafe{ (*node).prev_mut() } = RawLink::some(node);
+            *(*node).next_mut() = RawLink::some(node);
+            *(*node).prev_mut() = RawLink::some(node);
         } else {
             DList::insert_before(self.head, RawLink::some(node));
         }
@@ -307,23 +288,14 @@ impl<T: Node<T>> Deque<T> for DList<T> {
     #[inline]
     fn pop_front(&mut self) -> *mut T {
         if self.head.is_none() {
-            ptr::mut_null()
+            ptr::null_mut()
         } else {
             let front = self.front_link();
             self.remove_link(front);
             front.as_mut_ptr()
         }
     }
-}
 
-impl<T: Node<T>> Default for DList<T> {
-    #[inline]
-    fn default() -> DList<T> {
-        DList::new()
-    }
-}
-
-impl<T: Node<T>> DList<T> {
     /// Create an empty DList
     #[inline]
     pub fn new() -> DList<T> {
@@ -384,12 +356,12 @@ impl<T: Node<T>> DList<T> {
     ///
     /// O(N)
     #[inline]
-    pub fn insert_when(&mut self, node: *mut T, f: |&T, &T| -> bool) {
-        assert!(node.is_not_null());
+    pub unsafe fn insert_when(&mut self, node: *mut T, f: |&T, &T| -> bool) {
+        debug_assert!(node.is_not_null());
         let mut it = self.mut_iter();
         loop {
             let next = it.peek_next();
-            if next.is_null() || unsafe { f(&*next, &*node) } {
+            if next.is_null() || f(&*next, &*node) {
                 break
             }
             it.next();
@@ -404,7 +376,7 @@ impl<T: Node<T>> DList<T> {
     /// The user must guarantee that node is in this list
     #[inline]
     pub unsafe fn remove(&mut self, node: *mut T) -> *mut T {
-        assert!(node.is_not_null());
+        debug_assert!(node.is_not_null());
         self.remove_link(RawLink::some(node));
         node
     }
@@ -436,12 +408,19 @@ impl<T: Node<T>> DList<T> {
     }
 }
 
+impl<T: Node<T>> Default for DList<T> {
+    #[inline]
+    fn default() -> DList<T> {
+        DList::new()
+    }
+}
+
 impl<T: Node<T> + Ord> DList<T> {
     /// Insert `node` sorted in ascending order
     ///
     /// O(N)
     #[inline]
-    pub fn insert_ordered(&mut self, node: *mut T) {
+    pub unsafe fn insert_ordered(&mut self, node: *mut T) {
         self.insert_when(node, |a, b| a >= b)
     }
 }
@@ -519,7 +498,7 @@ pub trait ListInsertion<T> {
     /// Insert `node` just after to the element most recently return by `next()`
     ///
     /// The inserted element does not appear in the iteration.
-    fn insert_next(&mut self, node: *mut T);
+    unsafe fn insert_next(&mut self, node: *mut T);
 
     /// Provide a pointer to the next element, without changing the iterator.
     ///
@@ -529,8 +508,8 @@ pub trait ListInsertion<T> {
 
 impl<'a, T: Node<T>> ListInsertion<T> for MutItems<'a, T> {
     #[inline]
-    fn insert_next(&mut self, node: *mut T) {
-        assert!(node.is_not_null());
+    unsafe fn insert_next(&mut self, node: *mut T) {
+        debug_assert!(node.is_not_null());
         if self.head.is_none() {
             self.list.push_front(node);
         } else {
@@ -554,7 +533,7 @@ impl<'a, T: Node<T>> ListRemoval<T> for MutItems<'a, T> {
     #[inline]
     fn remove_next(&mut self) -> *mut T{
         if self.head.is_none() {
-            ptr::mut_null()
+            ptr::null_mut()
         } else {
             self.list.remove_link(self.head.prev());
             self.head.prev().as_mut_ptr()
@@ -640,9 +619,6 @@ mod test {
     use std::prelude::*;
     use std::ptr;
 
-    use Deque as IntrusiveDeque;
-    use MutableSeq as IntrusiveMutableSeq;
-    use Mutable as IntrusiveMutable;
     use super::{DList, Links, Node, RawLink};
 
     struct MyNode {
@@ -702,9 +678,9 @@ mod test {
     fn test_basic() {
         unsafe {
             let mut m: DList<MyNode> = DList::new();
-            assert_eq!(m.pop_front(), ptr::mut_null());
-            assert_eq!(m.pop(), ptr::mut_null());
-            assert_eq!(m.pop(), ptr::mut_null());
+            assert_eq!(m.pop_front(), ptr::null_mut());
+            assert_eq!(m.pop(), ptr::null_mut());
+            assert_eq!(m.pop(), ptr::null_mut());
             let v1_box = box MyNode {list_hook: Links::new(), val: 1};
             let v1 : *mut MyNode = mem::transmute(v1_box);
             m.push_front(v1);
@@ -719,7 +695,7 @@ mod test {
             assert_eq!(m.pop_front(), v2);
             assert_eq!(m.pop_front(), v3);
             assert_eq!(m.len(), 0);
-            assert_eq!(m.pop_front(), ptr::mut_null());
+            assert_eq!(m.pop_front(), ptr::null_mut());
             let v1_box = box MyNode {list_hook: Links::new(), val: 1};
             let v1 : *mut MyNode = mem::transmute(v1_box);
             m.push(v1);
@@ -772,7 +748,7 @@ mod test {
             let mut n = DList::new();
             let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
             let v2 : *mut MyNode = &mut *v2_box;
-            n.push(v2);
+            unsafe { n.push(v2) };
             m.append(n);
             assert_eq!(m.len(), 1);
             assert_eq!(m.pop(), v2);
@@ -783,7 +759,7 @@ mod test {
             let n = DList::new();
             let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
             let v2 : *mut MyNode = &mut *v2_box;
-            m.push(v2);
+            unsafe { m.push(v2) };
             m.append(n);
             assert_eq!(m.len(), 1);
             assert_eq!(m.pop(), v2);
@@ -815,7 +791,7 @@ mod test {
             let mut n = DList::new();
             let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
             let v2 : *mut MyNode = &mut *v2_box;
-            n.push(v2);
+            unsafe { n.push(v2) };
             m.prepend(n);
             assert_eq!(m.len(), 1);
             assert_eq!(m.pop(), v2);
@@ -857,7 +833,8 @@ mod test {
         m.rotate_backward(); check_links(&m);
         m.rotate_forward(); check_links(&m);
         assert_eq!(v.iter().map(|x| unsafe {mem::transmute(x)}).
-                   collect::<Vec<*const MyNode>>(), m.iter().collect());
+                   collect::<Vec<*const MyNode>>(),
+                   m.iter().collect::<Vec<*const MyNode>>());
         m.rotate_forward(); check_links(&m);
         m.rotate_forward(); check_links(&m);
         m.pop_front(); check_links(&m);
@@ -881,10 +858,10 @@ mod test {
         }
         m.clear();
         let mut n = DList::new();
-        assert_eq!(n.iter().next(), None)
+        assert_eq!(n.iter().next(), None);
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push_front(v4);
+        unsafe {n.push_front(v4) };
         {
             let mut it = n.iter();
             assert_eq!(it.next().unwrap(), v4 as *const MyNode);
@@ -898,13 +875,13 @@ mod test {
         let mut n = DList::new();
         let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
         let v2 : *mut MyNode = &mut *v2_box;
-        n.push(v2);
+        unsafe {n.push(v2)};
         let mut v3_box = box MyNode {list_hook: Links::new(), val: 3};
         let v3 : *mut MyNode = &mut *v3_box;
-        n.push(v3);
+        unsafe {n.push(v3)};
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push(v4);
+        unsafe {n.push(v4)};
         {
             let mut it = n.iter();
             it.next();
@@ -922,13 +899,13 @@ mod test {
         assert_eq!(n.iter().next(), None);
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push_front(v4);
+        unsafe {n.push_front(v4)};
         let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
         let v5 : *mut MyNode = &mut *v5_box;
-        n.push_front(v5);
+        unsafe {n.push_front(v5)};
         let mut v6_box = box MyNode {list_hook: Links::new(), val: 6};
         let v6 : *mut MyNode = &mut *v6_box;
-        n.push_front(v6);
+        unsafe {n.push_front(v6)};
         {
             let mut it = n.iter();
             assert_eq!(it.next().unwrap(), v6 as *const MyNode);
@@ -958,7 +935,7 @@ mod test {
         assert_eq!(n.iter().rev().next(), None);
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push_front(v4);
+        unsafe {n.push_front(v4)};
         {
             let mut it = n.iter().rev();
             assert_eq!(it.next().unwrap(), v4 as *const MyNode);
@@ -988,10 +965,10 @@ mod test {
         assert!(n.mut_iter().next().is_none());
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push_front(v4);
+        unsafe {n.push_front(v4)};
         let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
         let v5 : *mut MyNode = &mut *v5_box;
-        n.push(v5);
+        unsafe {n.push(v5)};
         {
             let mut it = n.mut_iter();
             assert!(it.next().is_some());
@@ -1007,13 +984,13 @@ mod test {
         assert!(n.mut_iter().next_back().is_none());
         let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
         let v4 : *mut MyNode = &mut *v4_box;
-        n.push_front(v4);
+        unsafe {n.push_front(v4)};
         let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
         let v5 : *mut MyNode = &mut *v5_box;
-        n.push_front(v5);
+        unsafe {n.push_front(v5)};
         let mut v6_box = box MyNode {list_hook: Links::new(), val: 6};
         let v6 : *mut MyNode = &mut *v6_box;
-        n.push_front(v6);
+        unsafe {n.push_front(v6)};
         {
             let mut it = n.mut_iter();
             assert_eq!(it.next().unwrap(), v6);
@@ -1026,23 +1003,12 @@ mod test {
     }
 
     #[test]
-    #[should_fail]
-    fn test_lifetime() {
-        let mut n = DList::new();
-        {
-            let mut v1_box = box MyNode {list_hook: Links::new(), val: 1};
-            let v1 : *mut MyNode = &mut *v1_box;
-            n.push(v1);
-        }
-    }
-
-    #[test]
     fn test_lifetime2() {
         let mut n = DList::new();
         {
             let mut v1_box = box MyNode {list_hook: Links::new(), val: 1};
             let v1 : *mut MyNode = &mut *v1_box;
-            n.push(v1);
+            unsafe {n.push(v1)};
             n.pop();
         }
     }
