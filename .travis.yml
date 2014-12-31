@@ -1,14 +1,1 @@
-env:
-  global:
-    - secure: GL23RpYauH/oL7xAkmk9YQEebUKwMFh8qpSEjCN1PMc6dr+mQWREbh0T0PnWkLGfXLtgved/V6cRqDkBuUCSWK8Xzeb0yNKQdOShLDVB1LeUsdTA14R+zP1EXWsS3z4VzPhCRyRC/ORI60iBEIuIOQiavxszNYOQdZwFNZuzPE0=
-  matrix:
-    - DEBUG=0
-    - DEBUG=1
-install:
-  - curl -s http://www.rust-lang.org/rustup.sh | sudo sh
-script:
-  - cargo build
-  - cargo test
-after_script:
-  - cargo doc
-  - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
+language: rust
