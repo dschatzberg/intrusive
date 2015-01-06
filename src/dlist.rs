@@ -19,6 +19,7 @@
 //! Due to the nature of intrusive data structures, some methods are deemed
 //! unsafe
 use core::kinds::marker::ContravariantLifetime;
+use core::cmp::Ordering;
 use core::default::Default;
 use core::fmt;
 use core::iter;
@@ -233,7 +234,7 @@ impl<T: Node<T>> DList<T> {
 
     #[inline]
     unsafe fn push(&mut self, node: *mut T) {
-        debug_assert!(node.is_not_null());
+        debug_assert!(!node.is_null());
         if self.head.is_none() {
             *(*node).next_mut() = RawLink::some(node);
             *(*node).prev_mut() = RawLink::some(node);
@@ -357,7 +358,7 @@ impl<T: Node<T>> DList<T> {
     /// O(N)
     #[inline]
     pub unsafe fn insert_when(&mut self, node: *mut T, f: |&T, &T| -> bool) {
-        debug_assert!(node.is_not_null());
+        debug_assert!(!node.is_null());
         let mut it = self.mut_iter();
         loop {
             let next = it.peek_next();
@@ -376,7 +377,7 @@ impl<T: Node<T>> DList<T> {
     /// The user must guarantee that node is in this list
     #[inline]
     pub unsafe fn remove(&mut self, node: *mut T) -> *mut T {
-        debug_assert!(node.is_not_null());
+        debug_assert!(!node.is_null());
         self.remove_link(RawLink::some(node));
         node
     }
@@ -425,7 +426,9 @@ impl<T: Node<T> + Ord> DList<T> {
     }
 }
 
-impl<'a, T: Node<T>> Iterator<*const T> for Items<'a, T> {
+impl<'a, T: Node<T>> Iterator for Items<'a, T> {
+    type Item = *const T;
+
     #[inline]
     fn next(&mut self) -> Option<*const T> {
         if self.head.is_none() {
@@ -442,7 +445,7 @@ impl<'a, T: Node<T>> Iterator<*const T> for Items<'a, T> {
     }
 }
 
-impl<'a, T: Node<T>> DoubleEndedIterator<*const T> for Items<'a, T> {
+impl<'a, T: Node<T>> DoubleEndedIterator for Items<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<*const T> {
         if self.tail.is_none() {
@@ -459,7 +462,8 @@ impl<'a, T: Node<T>> DoubleEndedIterator<*const T> for Items<'a, T> {
     }
 }
 
-impl<'a, T: Node<T>> Iterator<*mut T> for MutItems<'a, T> {
+impl<'a, T: Node<T>> Iterator for MutItems<'a, T> {
+    type Item = *mut T;
     #[inline]
     fn next(&mut self) -> Option<*mut T> {
         if self.head.is_none() {
@@ -476,7 +480,7 @@ impl<'a, T: Node<T>> Iterator<*mut T> for MutItems<'a, T> {
     }
 }
 
-impl<'a, T: Node<T>> DoubleEndedIterator<*mut T> for MutItems<'a, T> {
+impl<'a, T: Node<T>> DoubleEndedIterator for MutItems<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<*mut T> {
         if self.tail.is_none() {
@@ -509,7 +513,7 @@ pub trait ListInsertion<T> {
 impl<'a, T: Node<T>> ListInsertion<T> for MutItems<'a, T> {
     #[inline]
     unsafe fn insert_next(&mut self, node: *mut T) {
-        debug_assert!(node.is_not_null());
+        debug_assert!(!node.is_null());
         if self.head.is_none() {
             self.list.push_front(node);
         } else {
@@ -541,7 +545,9 @@ impl<'a, T: Node<T>> ListRemoval<T> for MutItems<'a, T> {
     }
 }
 
-impl<T: Node<T>> Iterator<*mut T> for MoveItems<T> {
+impl<T: Node<T>> Iterator for MoveItems<T> {
+    type Item = *mut T;
+
     #[inline]
     fn next(&mut self) -> Option<*mut T> {
         let front = self.list.pop_front();
@@ -553,7 +559,7 @@ impl<T: Node<T>> Iterator<*mut T> for MoveItems<T> {
     }
 }
 
-impl<T: Node<T>> DoubleEndedIterator<*mut T> for MoveItems<T> {
+impl<T: Node<T>> DoubleEndedIterator for MoveItems<T> {
     #[inline]
     fn next_back(&mut self) -> Option<*mut T> {
         let back = self.list.pop();
@@ -616,7 +622,7 @@ impl<T: Node<T> + fmt::Show> fmt::Show for DList<T> {
 #[cfg(test)]
 mod test {
     use std::mem;
-    use std::prelude::*;
+    use std::prelude::v1::*;
     use std::ptr;
 
     use super::{DList, Links, Node, RawLink};

@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with Intrusive.  If not, see <http://www.gnu.org/licenses/>.
 
-#![crate_name = "intrusive"]
+#![crate_name = "intrusive-containers"]
 #![experimental]
 #![crate_type = "rlib"]
-#![feature(globs,phase,unsafe_destructor,visible_private_types)]
+#![feature(associated_types,globs,phase,unsafe_destructor,visible_private_types)]
 #![no_std]
 
 #[phase(plugin, link)] extern crate core;
