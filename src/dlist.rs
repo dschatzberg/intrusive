@@ -120,7 +120,7 @@ impl<T: Node<T>> RawLink<T> {
         !self.is_none()
     }
 
-    fn map(&self, f: |&T| -> RawLink<T>) -> RawLink<T> {
+    fn map<F: FnMut(&T) -> RawLink<T>>(&self, mut f: F) -> RawLink<T> {
         if self.is_none() {
             RawLink::none()
         } else {
@@ -357,7 +357,7 @@ impl<T: Node<T>> DList<T> {
     ///
     /// O(N)
     #[inline]
-    pub unsafe fn insert_when(&mut self, node: *mut T, f: |&T, &T| -> bool) {
+    pub unsafe fn insert_when<F: FnMut(&T, &T) -> bool>(&mut self, node: *mut T, mut f: F) {
         debug_assert!(!node.is_null());
         let mut it = self.mut_iter();
         loop {

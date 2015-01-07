@@ -16,15 +16,15 @@
 #![crate_name = "intrusive-containers"]
 #![experimental]
 #![crate_type = "rlib"]
-#![feature(associated_types,globs,phase,unsafe_destructor,visible_private_types)]
+#![feature(phase,unsafe_destructor,visible_private_types)]
 #![no_std]
 
-#[phase(plugin, link)] extern crate core;
+#[macro_use] extern crate core;
 
 #[cfg(test)] extern crate test;
 
-#[cfg(test)] #[phase(plugin, link)] extern crate std;
-#[cfg(test)] #[phase(plugin, link)] extern crate log;
+#[cfg(test)] #[macro_use] extern crate std;
+#[cfg(test)] #[macro_use] extern crate log;
 
 pub use dlist::DList;
 
