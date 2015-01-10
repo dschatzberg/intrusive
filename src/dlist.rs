@@ -18,7 +18,7 @@
 //! The 'DList' allows elements to be inserted or removed from either end.
 //! Due to the nature of intrusive data structures, some methods are deemed
 //! unsafe
-use core::kinds::marker::ContravariantLifetime;
+use core::marker::ContravariantLifetime;
 use core::cmp::Ordering;
 use core::default::Default;
 use core::fmt;
