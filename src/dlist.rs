@@ -629,7 +629,7 @@ mod test {
 
     struct MyNode {
         list_hook: Links<MyNode>,
-        val: int
+        val: i32
     }
 
     impl Node<MyNode> for MyNode {
@@ -663,7 +663,7 @@ mod test {
             return;
         }
 
-        let mut len = 0u;
+        let mut len = 0us;
         let tail = list.head.prev();
         let mut last_ptr: RawLink<T> = tail;
         let mut node_ptr: RawLink<T> = list.head;
@@ -687,14 +687,14 @@ mod test {
             assert_eq!(m.pop_front(), ptr::null_mut());
             assert_eq!(m.pop(), ptr::null_mut());
             assert_eq!(m.pop(), ptr::null_mut());
-            let v1_box = box MyNode {list_hook: Links::new(), val: 1};
+            let v1_box = Box::new(MyNode {list_hook: Links::new(), val: 1});
             let v1 : *mut MyNode = mem::transmute(v1_box);
             m.push_front(v1);
             assert_eq!(m.pop_front(), v1);
-            let v2_box = box MyNode {list_hook: Links::new(), val: 2};
+            let v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
             let v2 : *mut MyNode = mem::transmute(v2_box);
             m.push(v2);
-            let v3_box = box MyNode {list_hook: Links::new(), val: 3};
+            let v3_box = Box::new(MyNode {list_hook: Links::new(), val: 3});
             let v3 : *mut MyNode = mem::transmute(v3_box);
             m.push(v3);
             assert_eq!(m.len(), 2);
@@ -702,25 +702,25 @@ mod test {
             assert_eq!(m.pop_front(), v3);
             assert_eq!(m.len(), 0);
             assert_eq!(m.pop_front(), ptr::null_mut());
-            let v1_box = box MyNode {list_hook: Links::new(), val: 1};
+            let v1_box = Box::new(MyNode {list_hook: Links::new(), val: 1});
             let v1 : *mut MyNode = mem::transmute(v1_box);
             m.push(v1);
-            let v3_box = box MyNode {list_hook: Links::new(), val: 3};
+            let v3_box = Box::new(MyNode {list_hook: Links::new(), val: 3});
             let v3 : *mut MyNode = mem::transmute(v3_box);
             m.push(v3);
-            let v5_box = box MyNode {list_hook: Links::new(), val: 5};
+            let v5_box = Box::new(MyNode {list_hook: Links::new(), val: 5});
             let v5 : *mut MyNode = mem::transmute(v5_box);
             m.push(v5);
-            let v7_box = box MyNode {list_hook: Links::new(), val: 7};
+            let v7_box = Box::new(MyNode {list_hook: Links::new(), val: 7});
             let v7 : *mut MyNode = mem::transmute(v7_box);
             m.push(v7);
             assert_eq!(m.pop_front(), v1);
 
             let mut n = DList::new();
-            let v2_box = box MyNode {list_hook: Links::new(), val: 2};
+            let v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
             let v2 : *mut MyNode = mem::transmute(v2_box);
             n.push_front(v2);
-            let v3_box = box MyNode {list_hook: Links::new(), val: 3};
+            let v3_box = Box::new(MyNode {list_hook: Links::new(), val: 3});
             let v3 : *mut MyNode = mem::transmute(v3_box);
             n.push_front(v3);
             {
@@ -752,7 +752,7 @@ mod test {
         {
             let mut m = DList::new();
             let mut n = DList::new();
-            let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
+            let mut v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
             let v2 : *mut MyNode = &mut *v2_box;
             unsafe { n.push(v2) };
             m.append(n);
@@ -763,7 +763,7 @@ mod test {
         {
             let mut m = DList::new();
             let n = DList::new();
-            let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
+            let mut v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
             let v2 : *mut MyNode = &mut *v2_box;
             unsafe { m.push(v2) };
             m.append(n);
@@ -795,7 +795,7 @@ mod test {
         {
             let mut m = DList::new();
             let mut n = DList::new();
-            let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
+            let mut v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
             let v2 : *mut MyNode = &mut *v2_box;
             unsafe { n.push(v2) };
             m.prepend(n);
@@ -860,12 +860,12 @@ mod test {
                      MyNode{ list_hook: Links::new(), val: 6}];
         let mut m = unsafe {list_from(v.as_slice())};
         for (i, elt) in m.iter().enumerate() {
-            assert_eq!(i as int, unsafe {(*elt).val});
+            assert_eq!(i as i32, unsafe {(*elt).val});
         }
         m.clear();
         let mut n = DList::new();
         assert_eq!(n.iter().next(), None);
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push_front(v4) };
         {
@@ -879,13 +879,13 @@ mod test {
     #[test]
     fn test_iterator_clone() {
         let mut n = DList::new();
-        let mut v2_box = box MyNode {list_hook: Links::new(), val: 2};
+        let mut v2_box = Box::new(MyNode {list_hook: Links::new(), val: 2});
         let v2 : *mut MyNode = &mut *v2_box;
         unsafe {n.push(v2)};
-        let mut v3_box = box MyNode {list_hook: Links::new(), val: 3};
+        let mut v3_box = Box::new(MyNode {list_hook: Links::new(), val: 3});
         let v3 : *mut MyNode = &mut *v3_box;
         unsafe {n.push(v3)};
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push(v4)};
         {
@@ -903,13 +903,13 @@ mod test {
     fn test_iterator_double_end() {
         let mut n = DList::new();
         assert_eq!(n.iter().next(), None);
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push_front(v4)};
-        let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
+        let mut v5_box = Box::new(MyNode {list_hook: Links::new(), val: 5});
         let v5 : *mut MyNode = &mut *v5_box;
         unsafe {n.push_front(v5)};
-        let mut v6_box = box MyNode {list_hook: Links::new(), val: 6};
+        let mut v6_box = Box::new(MyNode {list_hook: Links::new(), val: 6});
         let v6 : *mut MyNode = &mut *v6_box;
         unsafe {n.push_front(v6)};
         {
@@ -934,12 +934,12 @@ mod test {
                      MyNode{ list_hook: Links::new(), val: 6}];
         let mut m = unsafe {list_from(v.as_slice())};
         for (i, elt) in m.iter().rev().enumerate() {
-            assert_eq!((6 - i) as int, unsafe {(*elt).val});
+            assert_eq!((6 - i) as i32, unsafe {(*elt).val});
         }
         m.clear();
         let mut n = DList::new();
         assert_eq!(n.iter().rev().next(), None);
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push_front(v4)};
         {
@@ -962,17 +962,17 @@ mod test {
         let mut m = unsafe {list_from(v.as_slice())};
         let mut len = m.len();
         for (i, elt) in m.mut_iter().enumerate() {
-            assert_eq!(i as int, unsafe {(*elt).val});
+            assert_eq!(i as i32, unsafe {(*elt).val});
             len -= 1;
         }
         assert_eq!(len, 0);
         m.clear();
         let mut n = DList::new();
         assert!(n.mut_iter().next().is_none());
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push_front(v4)};
-        let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
+        let mut v5_box = Box::new(MyNode {list_hook: Links::new(), val: 5});
         let v5 : *mut MyNode = &mut *v5_box;
         unsafe {n.push(v5)};
         {
@@ -988,13 +988,13 @@ mod test {
     fn test_iterator_mut_double_end() {
         let mut n = DList::new();
         assert!(n.mut_iter().next_back().is_none());
-        let mut v4_box = box MyNode {list_hook: Links::new(), val: 4};
+        let mut v4_box = Box::new(MyNode {list_hook: Links::new(), val: 4});
         let v4 : *mut MyNode = &mut *v4_box;
         unsafe {n.push_front(v4)};
-        let mut v5_box = box MyNode {list_hook: Links::new(), val: 5};
+        let mut v5_box = Box::new(MyNode {list_hook: Links::new(), val: 5});
         let v5 : *mut MyNode = &mut *v5_box;
         unsafe {n.push_front(v5)};
-        let mut v6_box = box MyNode {list_hook: Links::new(), val: 6};
+        let mut v6_box = Box::new(MyNode {list_hook: Links::new(), val: 6});
         let v6 : *mut MyNode = &mut *v6_box;
         unsafe {n.push_front(v6)};
         {
@@ -1012,7 +1012,7 @@ mod test {
     fn test_lifetime2() {
         let mut n = DList::new();
         {
-            let mut v1_box = box MyNode {list_hook: Links::new(), val: 1};
+            let mut v1_box = Box::new(MyNode {list_hook: Links::new(), val: 1});
             let v1 : *mut MyNode = &mut *v1_box;
             unsafe {n.push(v1)};
             n.pop();
