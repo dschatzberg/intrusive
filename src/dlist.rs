@@ -215,7 +215,7 @@ impl<T: Node<T>> DList<T> {
     }
 
     #[inline]
-    fn len(&self) -> uint {
+    fn len(&self) -> usize {
         let mut v = 0;
         for _ in self.iter() {
             v +=1
