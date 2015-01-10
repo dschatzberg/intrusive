@@ -120,7 +120,7 @@ impl<T: Node<T>> RawLink<T> {
         !self.is_none()
     }
 
-    fn map<F: FnMut(&T) -> RawLink<T>>(&self, mut f: F) -> RawLink<T> {
+    fn map<F: FnOnce(&T) -> RawLink<T>>(&self, mut f: F) -> RawLink<T> {
         if self.is_none() {
             RawLink::none()
         } else {
