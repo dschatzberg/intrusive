@@ -16,7 +16,7 @@
 #![crate_name = "intrusive-containers"]
 #![experimental]
 #![crate_type = "rlib"]
-#![feature(phase,unsafe_destructor,visible_private_types)]
+#![feature(unsafe_destructor,visible_private_types)]
 #![no_std]
 
 #[macro_use] extern crate core;
