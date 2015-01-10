@@ -166,24 +166,29 @@ impl<T> PartialEq for RawLink<T> {
 impl<T> Eq for RawLink<T> {}
 
 impl<T: Node<T>> DList<T> {
+    #[inline]
     fn front_link(&self) -> RawLink<T> {
         self.head
     }
 
+    #[inline]
     fn back_link(&self) -> RawLink<T> {
         self.front_link().map(|t| t.prev())
     }
 
+    #[inline]
     unsafe fn insert_after(prev: RawLink<T>, node: RawLink<T>) {
         let next = prev.next();
         DList::insert(prev, next, node);
     }
 
+    #[inline]
     unsafe fn insert_before(next: RawLink<T>, node: RawLink<T>) {
         let prev = next.prev();
         DList::insert(prev, next, node);
     }
 
+    #[inline]
     unsafe fn insert(mut prev: RawLink<T>,
               mut next: RawLink<T>,
               mut node: RawLink<T>) {
@@ -193,6 +198,7 @@ impl<T: Node<T>> DList<T> {
         *prev.next_mut() = node;
     }
 
+    #[inline]
     fn remove_link(&mut self, mut node: RawLink<T>) {
         if self.front_link() == node {
             if self.back_link() == node {
@@ -612,7 +618,7 @@ impl<T: Node<T> + fmt::Show> fmt::Show for DList<T> {
 
         for (i, e) in self.iter().enumerate() {
             if i != 0 { try!(write!(f, ", ")); }
-            try!(write!(f, "{}", unsafe{ ptr::read(e) }));
+            try!(write!(f, "{:?}", unsafe{ ptr::read(e) }));
         }
 
         write!(f, "]")
