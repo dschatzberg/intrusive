@@ -14,9 +14,8 @@
 // along with Intrusive.  If not, see <http://www.gnu.org/licenses/>.
 
 #![crate_name = "intrusive-containers"]
-#![experimental]
 #![crate_type = "rlib"]
-#![feature(unsafe_destructor,visible_private_types)]
+#![feature(core,no_std,test,unsafe_destructor,visible_private_types)]
 #![no_std]
 
 #[macro_use] extern crate core;
@@ -24,11 +23,12 @@
 #[cfg(test)] extern crate test;
 
 #[cfg(test)] #[macro_use] extern crate std;
-#[cfg(test)] #[macro_use] extern crate log;
 
-pub use dlist::DList;
+pub use linked_list::LinkedList;
 
-pub mod dlist;
+pub mod linked_list;
+
+mod rawlink;
 
 #[cfg(not(test))]
 mod std {
