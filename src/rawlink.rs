@@ -12,6 +12,8 @@ use core::default::Default;
 use core::mem;
 use core::ptr;
 
+#[allow(raw_pointer_derive)]
+#[derive(Debug)]
 pub struct Rawlink<T> {
     p: *mut T
 }
@@ -51,6 +53,13 @@ impl<T> Rawlink<T> {
     /// Return the `Rawlink` and replace with `Rawlink::none()`
     pub fn take(&mut self) -> Rawlink<T> {
         mem::replace(self, Rawlink::none())
+    }
+}
+
+impl<T> PartialEq for Rawlink<T> {
+    #[inline]
+    fn eq(&self, other: &Rawlink<T>) -> bool {
+        self.p == other.p
     }
 }
 

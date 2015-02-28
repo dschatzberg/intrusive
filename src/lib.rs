@@ -15,7 +15,8 @@
 
 #![crate_name = "intrusive-containers"]
 #![crate_type = "rlib"]
-#![feature(core,no_std,test,unsafe_destructor,visible_private_types)]
+#![feature(box_syntax,core,no_std,unsafe_destructor, visible_private_types)]
+#![cfg_attr(test, feature(collections, test))]
 #![no_std]
 
 #[macro_use] extern crate core;
