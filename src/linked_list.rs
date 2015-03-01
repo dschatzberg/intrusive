@@ -16,8 +16,11 @@
 //! An intrusive double-linked list.
 //!
 //! The 'LinkedList' allows elements to be inserted or removed from either end.
+use core::cmp::Ordering;
 use core::default::Default;
-use core::iter::{FromIterator,IntoIterator};
+use core::fmt;
+use core::hash::{Hasher, Hash};
+use core::iter::{self,FromIterator,IntoIterator};
 use core::marker::PhantomData;
 use core::ops::Deref;
 use core::ops::DerefMut;
@@ -190,14 +193,24 @@ impl<'a, T, L: Linkable<T>> Clone for Iter<'a, T, L> {
 /// An iterator over mutable references to the items of a `LinkedList`
 pub struct IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
     list: &'a mut LinkedList<T, L, LP>,
-    head: Rawlink<T>,
-    tail: Rawlink<L>,
+    head: Rawlink<<T as Deref>::Target>,
+    tail: Rawlink<<T as Deref>::Target>,
     nelem: usize,
+}
+
+/// An iterator over mutable references to the items of a `LinkedList`
+pub struct IntoIter<T, L, LP>
+    where T: DerefMut,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    list: LinkedList<T, L, LP>
 }
 
 impl<T, L, LP> LinkedList<T, L, LP>
@@ -268,19 +281,10 @@ impl<T, L, LP> LinkedList<T, L, LP>
              tail: *self.sentinel.get_ptail()}
     }
 
-    // Provides a forward iterator with mutable references.
+    /// Consumes the list into an iterator yielding elements by value.
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<T, L, LP> {
-        let head_raw = match *self.sentinel.get_head_mut() {
-            Some(ref mut h) => Rawlink::some(h),
-            None => Rawlink::none(),
-        };
-        IterMut {
-            nelem: self.len(),
-            head: head_raw,
-            tail: *self.sentinel.get_ptail_mut(),
-            list: self
-        }
+    pub fn into_iter(self) -> IntoIter<T, L, LP> {
+        IntoIter{list: self}
     }
 
     /// Returns `true` if the `LinkedList` is empty
@@ -371,13 +375,34 @@ impl<T, L, LP> LinkedList<T, L, LP>
             self.length -= 1;
             front.get_pprev_mut().take();
             let mut next_link = front.get_next_mut().take();
-            if let Some(ref mut next) = next_link {
-                // chain the following element to the list
-                *next.get_pprev_mut() = Rawlink::some(&mut self.sentinel.links);
-            } else {
+            if self.length == 0 {
                 // the list will be empty, clear the tail pointer
                 *self.sentinel.get_ptail_mut() = Rawlink::none();
+            } else {
+                if self.length == 1 {
+                    *self.sentinel.get_ptail_mut() =
+                        Rawlink::some(&mut self.sentinel.links);
+                }
+                *next_link.as_mut().unwrap().get_pprev_mut() =
+                    Rawlink::some(&mut self.sentinel.links);
             }
+            // if let Some(ref mut next) = next_link {
+            //     // chain the following element to the list
+            //     *next.get_pprev_mut() = Rawlink::some(&mut self.sentinel.links);
+            // } else {
+            //     // the list will be empty, clear the tail pointer
+            //     *self.sentinel.get_ptail_mut() = Rawlink::none();
+            // }
+            // // If the length is one now, move the tail back
+            // if self.length == 1 {
+            //     self.sentinel.get_ptail_mut
+            // }
+            // if let Some(ptail) = self.sentinel.get_ptail_mut().resolve() {
+            //     if ptail as *const L == front.get_links() as *const L {
+
+            //     }
+            // }
+
             *self.sentinel.get_head_mut() = next_link;
             front
         })
@@ -419,6 +444,34 @@ impl<T, L, LP> LinkedList<T, L, LP>
         // step the tail pointer back
         *self.sentinel.get_ptail_mut() = *ptail.get_pprev();
         Some(tail)
+    }
+}
+
+impl<T, L, LP> LinkedList<T, L, LP>
+    where T: DerefMut,
+          <T as Deref>::Target: Node<T, L> + Sized,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    // Provides a forward iterator with mutable references.
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<T, L, LP> {
+        let head_raw = match *self.sentinel.get_head_mut() {
+            Some(ref mut h) => Rawlink::some(h.deref_mut()),
+            None => Rawlink::none(),
+        };
+        let tail_raw = match self.sentinel.get_ptail_mut().resolve() {
+            Some(ref mut pt) => {
+                Rawlink::some(pt.get_next_mut().as_mut().unwrap().deref_mut())
+            }
+            None => Rawlink::none(),
+        };
+        IterMut {
+            nelem: self.len(),
+            head: head_raw,
+            tail: tail_raw,
+            list: self
+        }
     }
 }
 
@@ -484,6 +537,48 @@ impl<T, L, LP> LinkedList<T, L, LP>
     // }
 }
 
+impl<T, L, LP> Clone for LinkedList<T, L, LP>
+    where T: DerefMut + Clone,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + Default + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>> + Default
+{
+    fn clone(&self) -> LinkedList<T, L, LP> {
+        self.iter().cloned().collect()
+    }
+}
+
+impl<T, L, LP> fmt::Debug for LinkedList<T, L, LP>
+    where T: DerefMut + fmt::Debug,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "["));
+
+        for (i, e) in self.iter().enumerate() {
+            if i != 0 { try!(write!(f, ", ")); }
+            try!(write!(f, "{:?}", *e));
+        }
+
+        write!(f, "]")
+    }
+}
+
+impl<T, L, LP> Hash for LinkedList<T, L, LP>
+    where T: DerefMut + Hash,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
+        for elt in self {
+            elt.hash(state);
+        }
+    }
+}
 
 impl<T, L, LP> Extend<T> for LinkedList<T, L, LP>
     where T: DerefMut,
@@ -506,6 +601,95 @@ impl<T, L, LP> FromIterator<T> for LinkedList<T, L, LP>
         let mut ret = LinkedList::new();
         ret.extend(iter);
         ret
+    }
+}
+
+impl<T, L, LP> IntoIterator for LinkedList<T, L, LP>
+    where T: DerefMut,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T>  + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    type Item = T;
+    type IntoIter = IntoIter<T, L, LP>;
+
+    fn into_iter(self) -> IntoIter<T, L, LP> {
+        self.into_iter()
+    }
+}
+
+impl<'a, T, L, LP> IntoIterator for &'a LinkedList<T, L, LP>
+    where T: DerefMut + 'a,
+          <T as Deref>::Target: Node<T, L> + 'a,
+          L: Linkable<T>  + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T, L>;
+
+    fn into_iter(self) -> Iter<'a, T, L> {
+        self.iter()
+    }
+}
+
+impl<'a, T, L, LP> IntoIterator for &'a mut LinkedList<T, L, LP>
+    where T: DerefMut + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          L: Linkable<T>  + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+{
+    type Item = &'a mut T;
+    type IntoIter = IterMut<'a, T, L, LP>;
+
+    fn into_iter(self) -> IterMut<'a, T, L, LP> {
+        self.iter_mut()
+    }
+}
+
+
+impl<T, L, LP> PartialEq for LinkedList<T, L, LP>
+    where T: DerefMut + PartialEq,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>,
+{
+    fn eq(&self, other: &LinkedList<T, L, LP>) -> bool {
+        self.len() == other.len() &&
+            iter::order::eq(self.iter(), other.iter())
+    }
+
+    fn ne(&self, other: &LinkedList<T, L, LP>) -> bool {
+        self.len() != other.len() ||
+            iter::order::ne(self.iter(), other.iter())
+    }
+}
+
+impl<T, L, LP> Eq for LinkedList<T, L, LP>
+    where T: DerefMut + PartialEq,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>,
+{}
+
+impl<T, L, LP> PartialOrd for LinkedList<T, L, LP>
+    where T: DerefMut + PartialOrd,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    fn partial_cmp(&self, other: &LinkedList<T, L, LP>) -> Option<Ordering> {
+        iter::order::partial_cmp(self.iter(), other.iter())
+    }
+}
+
+impl<T, L, LP> Ord for LinkedList<T, L, LP>
+    where T: DerefMut + Ord,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    fn cmp(&self, other: &LinkedList<T, L, LP>) -> Ordering {
+        iter::order::cmp(self.iter(), other.iter())
     }
 }
 
@@ -560,7 +744,7 @@ impl<'a, T, L: Linkable<T>> ExactSizeIterator for Iter<'a, T, L>
 
 impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -574,10 +758,10 @@ impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
         self.head.resolve().map(|next| {
             self.nelem -= 1;
             self.head = match *next.get_next_mut() {
-                Some(ref mut node) => Rawlink::some(node),
+                Some(ref mut node) => Rawlink::some(node.deref_mut()),
                 None => Rawlink::none(),
             };
-            next
+            next.get_pprev_mut().resolve().unwrap().get_next_mut().as_mut().unwrap()
         })
     }
 
@@ -589,7 +773,7 @@ impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
 
 impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -598,9 +782,15 @@ impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
         if self.nelem == 0 {
             return None;
         }
-        self.tail.resolve().map(|prev| {
+        self.tail.resolve().map(|tail| {
             self.nelem -= 1;
-            self.tail = *prev.get_pprev();
+            // have to iterate back twice then forwards once
+            let mut prev = tail.get_pprev_mut().resolve().unwrap();
+            self.tail = match prev.get_pprev_mut().resolve() {
+                Some(ref mut prevlinks) =>
+                    Rawlink::some(prevlinks.get_next_mut().as_mut().unwrap().deref_mut()),
+                None => Rawlink::none(),
+            };
             prev.get_next_mut().as_mut().unwrap()
         })
     }
@@ -608,16 +798,109 @@ impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
 
 impl<'a, T, L, LP> ExactSizeIterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a {}
+
+impl<'a, T, L, LP> IterMut<'a, T, L, LP>
+    where T: DerefMut + 'a,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          L: Linkable<T> + 'static, // the static is here due to rust issue #22062
+          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+{
+    /// Inserts `elt` just after the element most recently returned by `.next()`.
+    /// The inserted element does not appear in the iteration.
+    #[inline]
+    pub fn insert_next(&mut self, mut elt: T) {
+        // ensure links are not already being used
+        elt.get_links().check_links();
+
+        match self.head.resolve() {
+            None => { self.list.push_back(elt); }
+            Some(mut node) => {
+                let mut prev_links = node.get_pprev_mut().resolve().unwrap();
+                if prev_links as *const L ==
+                    &self.list.sentinel.links as *const L {
+                        return self.list.push_front(elt);
+                    }
+                // Fix tail if needed
+                let tail = self.list.sentinel.get_ptail_mut().resolve().unwrap();
+                if tail as *const L == prev_links as *const L {
+                    *self.list.sentinel.get_ptail_mut() =
+                        Rawlink::some(elt.get_links_mut());
+                }
+                // insert
+                *node.get_pprev_mut() = Rawlink::some(elt.get_links_mut());
+                *elt.get_next_mut() = prev_links.get_next_mut().take();
+                *elt.get_pprev_mut() = Rawlink::some(prev_links);
+                *prev_links.get_next_mut() = Some(elt);
+                self.list.length += 1;
+            }
+        }
+    }
+
+    /// Provides a reference to the next element, without changing the iterator.
+    #[inline]
+    pub fn peek_next(&mut self) -> Option<&mut T> {
+        if self.nelem == 0 {
+            return None
+        }
+        self.head.resolve().map(|head| {
+            head.get_pprev_mut().resolve().unwrap().get_next_mut().as_mut().unwrap()
+        })
+    }
+}
+
+impl<T, L, LP> Iterator for IntoIter<T, L, LP>
+    where T: DerefMut,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    type Item = T;
+
+    #[inline]
+    fn next(&mut self) -> Option<T> { self.list.pop_front() }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.list.length, Some(self.list.length))
+    }
+}
+
+impl<T, L, LP> DoubleEndedIterator for IntoIter<T, L, LP>
+    where T: DerefMut,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>>
+{
+    #[inline]
+    fn next_back(&mut self) -> Option<T> { self.list.pop_back() }
+}
+
+impl<T, L, LP> Clone for IntoIter<T, L, LP>
+    where T: DerefMut + Clone,
+          <T as Deref>::Target: Node<T, L>,
+          L: Linkable<T> + Default + 'static,
+          LP: DerefMut<Target=Sentinel<T, L>> + Default
+{
+    #[inline]
+    fn clone(&self) -> IntoIter<T, L, LP> {
+        IntoIter { list: self.list.clone() }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
+    use std::cmp::Ordering;
     use std::default::Default;
+    use std::hash::{self, Hash, Hasher, SipHasher};
     use std::fmt;
     use std::ops::{Deref, DerefMut};
+    use std::thread;
+    use rand;
     use super::{LinkedList, Linkable, Links, Node, Sentinel};
 
     struct MyInt {
@@ -637,6 +920,12 @@ mod tests {
         }
     }
 
+    impl Hash for MyInt {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.i.hash(state);
+        }
+    }
+
     impl Node<Box<MyInt>, Links<Box<MyInt>>> for MyInt {
         fn get_links(&self) -> &Links<Box<MyInt>> { &self.links }
         fn get_links_mut(&mut self) -> &mut Links<Box<MyInt>> { &mut self.links }
@@ -651,6 +940,20 @@ mod tests {
     impl PartialEq<i32> for MyInt {
         fn eq(&self, other: &i32) -> bool {
             self.i == *other
+        }
+    }
+
+    impl Eq for MyInt {}
+
+    impl PartialOrd for MyInt {
+        fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+            self.i.partial_cmp(&other.i)
+        }
+    }
+
+    impl Ord for MyInt {
+        fn cmp(&self, other: &MyInt) -> Ordering {
+            self.i.cmp(&other.i)
         }
     }
 
@@ -982,32 +1285,46 @@ mod tests {
         assert!(it.next().is_none());
     }
 
-    // #[test]
-    // fn test_insert_prev() {
-    //     let mut m = list_from(&[0,2,4,6,8]);
-    //     let len = m.len();
-    //     {
-    //         let mut it = m.iter_mut();
-    //         it.insert_next(-2);
-    //         loop {
-    //             match it.next() {
-    //                 None => break,
-    //                 Some(elt) => {
-    //                     it.insert_next(*elt + 1);
-    //                     match it.peek_next() {
-    //                         Some(x) => assert_eq!(*x, *elt + 2),
-    //                         None => assert_eq!(8, *elt),
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         it.insert_next(0);
-    //         it.insert_next(1);
-    //     }
-    //     check_links(&m);
-    //     assert_eq!(m.len(), 3 + len * 2);
-    //     assert_eq!(m.into_iter().collect::<Vec<_>>(), [-2,0,1,2,3,4,5,6,7,8,9,0,1]);
-    // }
+    #[test]
+    fn test_insert_next() {
+        let mut m = list_from(&[box MyInt::new(0), box MyInt::new(2),
+                                box MyInt::new(4),box MyInt::new(6),
+                                box MyInt::new(8)]);
+        let len = m.len();
+        {
+            let mut it = m.iter_mut();
+            it.insert_next(box MyInt::new(-2));
+            loop {
+                match it.next() {
+                    None => break,
+                    Some(elt) => {
+                        it.insert_next(box MyInt::new(elt.i + 1));
+                        match it.peek_next() {
+                            Some(x) => assert_eq!(x.i, elt.i + 2),
+                            None => assert_eq!(8, elt.i),
+                        }
+                    }
+                }
+            }
+            it.insert_next(box MyInt::new(0));
+            it.insert_next(box MyInt::new(1));
+        }
+        check_links(&m);
+        assert_eq!(m.len(), 3 + len * 2);
+        assert_eq!(m.into_iter().collect::<Vec<_>>(), [box MyInt::new(-2),
+                                                       box MyInt::new(0),
+                                                       box MyInt::new(1),
+                                                       box MyInt::new(2),
+                                                       box MyInt::new(3),
+                                                       box MyInt::new(4),
+                                                       box MyInt::new(5),
+                                                       box MyInt::new(6),
+                                                       box MyInt::new(7),
+                                                       box MyInt::new(8),
+                                                       box MyInt::new(9),
+                                                       box MyInt::new(0),
+                                                       box MyInt::new(1)]);
+    }
 
     #[test]
     fn test_mut_rev_iter() {
@@ -1021,5 +1338,115 @@ mod tests {
         let mut it = n.iter_mut().rev();
         assert!(it.next().is_some());
         assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn test_send() {
+        let n = list_from(&[box MyInt::new(1), box MyInt::new(2),
+                            box MyInt::new(3)]);
+        thread::spawn(move || {
+            check_links(&n);
+            let a = list_from(&[box MyInt::new(1),box MyInt::new(2),
+                                box MyInt::new(3)]);
+            assert_eq!(a, n);
+        }).join().ok().unwrap();
+    }
+
+    #[test]
+    fn test_eq() {
+        let mut n = list_from(&[]);
+        let mut m = list_from(&[]);
+        assert!(n == m);
+        n.push_front(box MyInt::new(1));
+        assert!(n != m);
+        m.push_back(box MyInt::new(1));
+        assert!(n == m);
+
+        let n = list_from(&[box MyInt::new(2), box MyInt::new(3),
+                            box MyInt::new(4)]);
+        let m = list_from(&[box MyInt::new(1),
+                            box MyInt::new(2),
+                            box MyInt::new(3)]);
+        assert!(n != m);
+    }
+
+    #[test]
+    fn test_hash() {
+      let mut x: MyIntList = LinkedList::new();
+      let mut y: MyIntList = LinkedList::new();
+
+      assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
+
+      x.push_back(box MyInt::new(1));
+      x.push_back(box MyInt::new(2));
+      x.push_back(box MyInt::new(3));
+
+      y.push_front(box MyInt::new(3));
+      y.push_front(box MyInt::new(2));
+      y.push_front(box MyInt::new(1));
+
+      assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
+    }
+
+    #[test]
+    fn test_ord() {
+        let n = list_from(&[]);
+        let m = list_from(&[box MyInt::new(1),
+                            box MyInt::new(2),
+                            box MyInt::new(3)]);
+        assert!(n < m);
+        assert!(m > n);
+        assert!(n <= n);
+        assert!(n >= n);
+    }
+
+    #[test]
+    fn test_fuzz() {
+        for _ in 0..25 {
+            fuzz_test(3);
+            fuzz_test(16);
+            fuzz_test(189);
+        }
+    }
+
+    #[cfg(test)]
+    fn fuzz_test(sz: i32) {
+        println!("Fuzz!");
+        let mut m: MyIntList = LinkedList::new();
+        let mut v = vec![];
+        for i in 0..sz {
+            check_links(&m);
+            let r: u8 = rand::random();
+            println!("{}", r % 6);
+            match r % 6 {
+                0 => {
+                    m.pop_back();
+                    v.pop();
+                }
+                1 => {
+                    if !v.is_empty() {
+                        m.pop_front();
+                        v.remove(0);
+                    }
+                }
+                2 | 4 =>  {
+                    m.push_front(box MyInt::new(-i));
+                    v.insert(0, box MyInt::new(-i));
+                }
+                3 | 5 | _ => {
+                    m.push_back(box MyInt::new(i));
+                    v.push(box MyInt::new(i));
+                }
+            }
+        }
+
+        check_links(&m);
+
+        let mut i = 0;
+        for (ref a, ref b) in m.into_iter().zip(v.iter()) {
+            i += 1;
+            assert_eq!(a.i, b.i);
+        }
+        assert_eq!(i, v.len());
     }
 }
