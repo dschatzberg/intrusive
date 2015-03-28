@@ -3,7 +3,7 @@
 name = "intrusive-containers"
 description = "A library of intrusive data structures"
 license = "LGPL-3.0+"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Dan Schatzberg <schatzberg.dan@gmail.com>"]
 
 [dependencies]
