@@ -8,7 +8,7 @@ explicitly allocate memory. Instead they depend on the elements to contain the
 necessary references to be inserted into the container. This is useful in cases
 where memory allocation is not possible or needs to be tightly controlled.
 
-[Documentation](https://dschatzberg.github.io/intrusive/intrusive-containers/index.html)
+[Documentation](https://dschatzberg.github.io/intrusive/intrusive_containers/index.html)
 
 License
 -------
