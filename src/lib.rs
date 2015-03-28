@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with Intrusive.  If not, see <http://www.gnu.org/licenses/>.
 
-#![crate_name = "intrusive-containers"]
+#![crate_name = "intrusive_containers"]
 #![crate_type = "rlib"]
 #![feature(box_syntax,core,no_std,unsafe_destructor, visible_private_types)]
 #![cfg_attr(test, feature(collections, hash, test))]
