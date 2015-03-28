@@ -36,14 +36,18 @@ pub struct LinkedList<T, L, LP>
 }
 
 pub struct Sentinel<T, L>
-    where L: Linkable<T>
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {
     links: L,
     _marker: PhantomData<T>,
 }
 
 impl<T, L> Default for Sentinel<T, L>
-    where L: Linkable<T> + Default
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T> + Default
 {
     fn default() -> Sentinel<T, L> {
         Sentinel { links: Default::default(), _marker: PhantomData }
@@ -447,15 +451,15 @@ impl<T, L, LP> LinkedList<T, L, LP>
     }
 }
 
-impl<T, L, LP> LinkedList<T, L, LP>
+impl<'a, T, L, LP> LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L> + Sized,
+          <T as Deref>::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
     // Provides a forward iterator with mutable references.
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<T, L, LP> {
+    pub fn iter_mut(&'a mut self) -> IterMut<'a, T, L, LP> {
         let head_raw = match *self.sentinel.get_head_mut() {
             Some(ref mut h) => Rawlink::some(h.deref_mut()),
             None => Rawlink::none(),
