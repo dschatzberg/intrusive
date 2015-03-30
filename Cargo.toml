@@ -9,5 +9,5 @@ repository = "http://github.com/dschatzberg/intrusive"
 homepage = "http://github.com/dschatzberg/intrusive"
 documentation = "https://dschatzberg.github.io/intrusive/intrusive_containers/index.html"
 
-[dependencies]
+[dev-dependencies]
 rand = "0.2"
