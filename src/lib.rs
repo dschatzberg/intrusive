@@ -17,14 +17,16 @@
 #![crate_type = "rlib"]
 #![feature(box_syntax,core,no_std,unsafe_destructor,visible_private_types)]
 #![cfg_attr(test, feature(collections, hash, test))]
-#![no_std]
+#![cfg_attr(feature="nostd", no_std)]
 
 #[macro_use] extern crate core;
 
 #[cfg(test)] extern crate test;
 #[cfg(test)] extern crate rand;
 
-#[cfg(test)] #[macro_use] extern crate std;
+#[cfg(test)]
+#[cfg(feature="nostd")]
+#[macro_use] extern crate std;
 
 pub use linked_list::LinkedList;
 
@@ -33,6 +35,7 @@ pub mod linked_list;
 mod rawlink;
 
 #[cfg(not(test))]
+#[cfg(feature="nostd")]
 mod std {
     pub use core::clone;
     pub use core::cmp;
