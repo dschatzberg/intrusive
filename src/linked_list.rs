@@ -1058,7 +1058,7 @@ mod tests {
 
     #[cfg(test)]
     fn list_from<T>(v: &[T]) -> LinkedList<T, Links<T>, Box<Sentinel<T, Links<T>>>>
-        where T: Clone + DerefMut + 'static,
+        where T: Clone + DerefMut,
               T::Target: Node<T, Links<T>>
     {
         v.iter().cloned().collect()
