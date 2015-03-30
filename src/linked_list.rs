@@ -22,7 +22,6 @@ use core::fmt;
 use core::hash::{Hasher, Hash};
 use core::iter::{self,FromIterator,IntoIterator};
 use core::marker::PhantomData;
-use core::ops::Deref;
 use core::ops::DerefMut;
 use core::prelude::*;
 use super::rawlink::Rawlink;
@@ -57,7 +56,7 @@ impl<T, L> Default for Sentinel<T, L>
 #[unsafe_destructor]
 impl<T, L> Drop for Sentinel<T, L>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {
     fn drop(&mut self) {
@@ -67,7 +66,7 @@ impl<T, L> Drop for Sentinel<T, L>
 
 impl<T, L> Sentinel<T, L>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {
     #[inline]
@@ -197,20 +196,20 @@ impl<'a, T, L: Linkable<T>> Clone for Iter<'a, T, L> {
 /// An iterator over mutable references to the items of a `LinkedList`
 pub struct IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
     list: &'a mut LinkedList<T, L, LP>,
-    head: Rawlink<<T as Deref>::Target>,
-    tail: Rawlink<<T as Deref>::Target>,
+    head: Rawlink<T::Target>,
+    tail: Rawlink<T::Target>,
     nelem: usize,
 }
 
 /// An iterator over mutable references to the items of a `LinkedList`
 pub struct IntoIter<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -219,7 +218,7 @@ pub struct IntoIter<T, L, LP>
 
 impl<T, L, LP> LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -453,7 +452,7 @@ impl<T, L, LP> LinkedList<T, L, LP>
 
 impl<'a, T, L, LP> LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -481,7 +480,7 @@ impl<'a, T, L, LP> LinkedList<T, L, LP>
 
 impl<T, L, LP> Default for LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + Default + 'static,
           LP: DerefMut<Target=Sentinel<T, L>> + Default
 {
@@ -493,7 +492,7 @@ impl<T, L, LP> Default for LinkedList<T, L, LP>
 
 impl<T, L, LP> LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + Default + 'static,
           LP: DerefMut<Target=Sentinel<T, L>> + Default
 {
@@ -543,7 +542,7 @@ impl<T, L, LP> LinkedList<T, L, LP>
 
 impl<T, L, LP> Clone for LinkedList<T, L, LP>
     where T: DerefMut + Clone,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + Default + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + Default
 {
@@ -554,7 +553,7 @@ impl<T, L, LP> Clone for LinkedList<T, L, LP>
 
 impl<T, L, LP> fmt::Debug for LinkedList<T, L, LP>
     where T: DerefMut + fmt::Debug,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -572,7 +571,7 @@ impl<T, L, LP> fmt::Debug for LinkedList<T, L, LP>
 
 impl<T, L, LP> Hash for LinkedList<T, L, LP>
     where T: DerefMut + Hash,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -586,7 +585,7 @@ impl<T, L, LP> Hash for LinkedList<T, L, LP>
 
 impl<T, L, LP> Extend<T> for LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -597,7 +596,7 @@ impl<T, L, LP> Extend<T> for LinkedList<T, L, LP>
 
 impl<T, L, LP> FromIterator<T> for LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + Default + 'static,
           LP: DerefMut<Target=Sentinel<T, L>> + Default
 {
@@ -610,7 +609,7 @@ impl<T, L, LP> FromIterator<T> for LinkedList<T, L, LP>
 
 impl<T, L, LP> IntoIterator for LinkedList<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T>  + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -624,7 +623,7 @@ impl<T, L, LP> IntoIterator for LinkedList<T, L, LP>
 
 impl<'a, T, L, LP> IntoIterator for &'a LinkedList<T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          T::Target: Node<T, L> + 'a,
           L: Linkable<T>  + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -638,7 +637,7 @@ impl<'a, T, L, LP> IntoIterator for &'a LinkedList<T, L, LP>
 
 impl<'a, T, L, LP> IntoIterator for &'a mut LinkedList<T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T>  + 'static,
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -653,7 +652,7 @@ impl<'a, T, L, LP> IntoIterator for &'a mut LinkedList<T, L, LP>
 
 impl<T, L, LP> PartialEq for LinkedList<T, L, LP>
     where T: DerefMut + PartialEq,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>,
 {
@@ -670,14 +669,14 @@ impl<T, L, LP> PartialEq for LinkedList<T, L, LP>
 
 impl<T, L, LP> Eq for LinkedList<T, L, LP>
     where T: DerefMut + PartialEq,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>,
 {}
 
 impl<T, L, LP> PartialOrd for LinkedList<T, L, LP>
     where T: DerefMut + PartialOrd,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -688,7 +687,7 @@ impl<T, L, LP> PartialOrd for LinkedList<T, L, LP>
 
 impl<T, L, LP> Ord for LinkedList<T, L, LP>
     where T: DerefMut + Ord,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -699,7 +698,7 @@ impl<T, L, LP> Ord for LinkedList<T, L, LP>
 
 impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          T::Target: Node<T, L> + 'a,
           L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {
     type Item = &'a T;
@@ -724,7 +723,7 @@ impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
 
 impl<'a, T, L: Linkable<T>> DoubleEndedIterator for Iter<'a, T, L>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          T::Target: Node<T, L> + 'a,
           L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {
     #[inline]
@@ -742,13 +741,13 @@ impl<'a, T, L: Linkable<T>> DoubleEndedIterator for Iter<'a, T, L>
 
 impl<'a, T, L: Linkable<T>> ExactSizeIterator for Iter<'a, T, L>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + 'a,
+          T::Target: Node<T, L> + 'a,
           L: Linkable<T> + 'static // the static is here due to rust issue #22062
 {}
 
 impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -777,7 +776,7 @@ impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
 
 impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -802,13 +801,13 @@ impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
 
 impl<'a, T, L, LP> ExactSizeIterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a {}
 
 impl<'a, T, L, LP> IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
-          <T as Deref>::Target: Node<T, L> + Sized + 'a,
+          T::Target: Node<T, L> + Sized + 'a,
           L: Linkable<T> + 'static, // the static is here due to rust issue #22062
           LP: DerefMut<Target=Sentinel<T, L>> + 'a
 {
@@ -857,7 +856,7 @@ impl<'a, T, L, LP> IterMut<'a, T, L, LP>
 
 impl<T, L, LP> Iterator for IntoIter<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -874,7 +873,7 @@ impl<T, L, LP> Iterator for IntoIter<T, L, LP>
 
 impl<T, L, LP> DoubleEndedIterator for IntoIter<T, L, LP>
     where T: DerefMut,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + 'static,
           LP: DerefMut<Target=Sentinel<T, L>>
 {
@@ -884,7 +883,7 @@ impl<T, L, LP> DoubleEndedIterator for IntoIter<T, L, LP>
 
 impl<T, L, LP> Clone for IntoIter<T, L, LP>
     where T: DerefMut + Clone,
-          <T as Deref>::Target: Node<T, L>,
+          T::Target: Node<T, L>,
           L: Linkable<T> + Default + 'static,
           LP: DerefMut<Target=Sentinel<T, L>> + Default
 {
@@ -902,7 +901,7 @@ mod tests {
     use std::default::Default;
     use std::hash::{self, Hash, Hasher, SipHasher};
     use std::fmt;
-    use std::ops::{Deref, DerefMut};
+    use std::ops::DerefMut;
     use std::thread;
     use rand;
     use super::{LinkedList, Linkable, Links, Node, Sentinel};
@@ -972,14 +971,14 @@ mod tests {
 
     pub fn check_links<T, L, LP>(list: &LinkedList<T, L, LP>)
         where T: DerefMut,
-              <T as Deref>::Target: Node<T, L>,
+              T::Target: Node<T, L>,
               L: Linkable<T> + fmt::Debug + 'static, // the static is here due
                                                      // to rust issue #22062
               LP: DerefMut<Target=Sentinel<T, L>>
     {
         let mut len = 0;
         let mut last_link = &list.sentinel.links;
-        let mut node_ptr: &<T as Deref>::Target;
+        let mut node_ptr: &T::Target;
         match *list.sentinel.get_head() {
             None => { assert_eq!(0, list.length); return }
             Some(ref node) => node_ptr = &**node,
@@ -1061,7 +1060,7 @@ mod tests {
     #[cfg(test)]
     fn list_from<T>(v: &[T]) -> LinkedList<T, Links<T>, Box<Sentinel<T, Links<T>>>>
         where T: Clone + DerefMut + 'static,
-              <T as Deref>::Target: Node<T, Links<T>>
+              T::Target: Node<T, Links<T>>
     {
         v.iter().cloned().collect()
     }
