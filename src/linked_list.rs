@@ -26,128 +26,9 @@ use core::ops::DerefMut;
 use core::prelude::*;
 use super::rawlink::Rawlink;
 
-/// An intrusive doubly-linked list
-pub struct LinkedList<T, L, LP>
-    where LP: DerefMut<Target=Sentinel<T, L>>
-{
-    length: usize,
-    sentinel: LP,
-}
-
-pub struct Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    links: L,
-    _marker: PhantomData<T>,
-}
-
-impl<T, L> Default for Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default
-{
-    fn default() -> Sentinel<T, L> {
-        Sentinel { links: Default::default(), _marker: PhantomData }
-    }
-}
-
-#[unsafe_destructor]
-impl<T, L> Drop for Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-impl<T, L> Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    #[inline]
-    pub fn new(l: L) -> Sentinel<T, L> {
-        Sentinel { links: l, _marker: PhantomData }
-    }
-
-    fn clear(&mut self) {
-        // remove the elements using a loop, ensuring not to have a recursive
-        // destruction
-        while let Some(mut link) = self.links.get_next_mut().take() {
-            *self.links.get_next_mut() = link.get_next_mut().take();
-            link.get_pprev_mut().take();
-        }
-
-        *self.links.get_pprev_mut() = Rawlink::none();
-    }
-
-    fn get_head(&self) -> &Link<T> { self.links.get_next() }
-    fn get_head_mut(&mut self) -> &mut Link<T> {
-        self.links.get_next_mut()
-    }
-    fn get_ptail(&self) -> &Rawlink<L> {
-        self.links.get_pprev()
-    }
-    fn get_ptail_mut(&mut self) -> &mut Rawlink<L> {
-        self.links.get_pprev_mut()
-    }
-}
-
-type Link<T> = Option<T>;
-
-/// Link trait allowing a struct to be inserted into a `LinkedList`
-///
-/// The trait is unsafe because any implementation must impl Drop to call
-/// check_links()
-pub unsafe trait Linkable<T> : Sized
-{
-    fn get_next(&self) -> &Link<T>;
-    fn get_next_mut(&mut self) -> &mut Link<T>;
-    fn get_pprev(&self) -> &Rawlink<Self>;
-    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self>;
-    fn check_links(&self) {
-        assert!(self.get_next().is_none());
-        assert!(self.get_pprev().resolve_immut().is_none());
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Links<T> {
-    next: Link<T>,
-    pprev: Rawlink<Links<T>>,
-}
-
-impl<T> Default for Links<T> {
-    fn default() -> Links<T> {
-        Links { next: None, pprev: Rawlink::none() }
-    }
-}
-
-#[unsafe_destructor]
-impl<T> Drop for Links<T> {
-    fn drop(&mut self) {
-        self.check_links()
-    }
-}
-
-unsafe impl<T> Linkable<T> for Links<T> {
-    fn get_next(&self) -> &Link<T> { &self.next }
-
-    fn get_next_mut(&mut self) -> &mut Link<T> { &mut self.next }
-
-    fn get_pprev(&self) -> &Rawlink<Self> { &self.pprev }
-
-    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self> { &mut self.pprev }
-}
-
-impl<T> Links<T> {
-    #[inline]
-    pub fn new() -> Links<T> { Default::default() }
-}
+///////////////////////
+// Trait Definitions //
+///////////////////////
 
 /// A trait that allows a struct to be inserted into a `LinkedList`
 pub trait Node<T, L>
@@ -176,21 +57,56 @@ pub trait Node<T, L>
     }
 }
 
+/// Link trait allowing a struct to be inserted into a `LinkedList`
+///
+/// The trait is unsafe because any implementation must impl Drop to call
+/// check_links()
+pub unsafe trait Linkable<T> : Sized
+{
+    fn get_next(&self) -> &Link<T>;
+    fn get_next_mut(&mut self) -> &mut Link<T>;
+    fn get_pprev(&self) -> &Rawlink<Self>;
+    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self>;
+    fn check_links(&self) {
+        assert!(self.get_next().is_none());
+        assert!(self.get_pprev().resolve_immut().is_none());
+    }
+}
+
+////////////////////////
+// Struct Definitions //
+////////////////////////
+
+/// An intrusive doubly-linked list
+pub struct LinkedList<T, L, LP>
+    where LP: DerefMut<Target=Sentinel<T, L>>
+{
+    length: usize,
+    sentinel: LP,
+}
+
+pub struct Sentinel<T, L>
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T>
+{
+    links: L,
+    _marker: PhantomData<T>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Links<T> {
+    next: Link<T>,
+    pprev: Rawlink<Links<T>>,
+}
+
+type Link<T> = Option<T>;
+
 /// An iterator over references to the items of a `LinkedList`
 pub struct Iter<'a, T:'a, L: Linkable<T> + 'a> {
     head: &'a Link<T>,
     tail: Rawlink<L>,
     nelem: usize,
-}
-
-impl<'a, T, L: Linkable<T>> Clone for Iter<'a, T, L> {
-    fn clone(&self) -> Iter<'a, T, L> {
-        Iter {
-            head: self.head.clone(),
-            tail: self.tail,
-            nelem: self.nelem,
-        }
-    }
 }
 
 /// An iterator over mutable references to the items of a `LinkedList`
@@ -215,6 +131,8 @@ pub struct IntoIter<T, L, LP>
 {
     list: LinkedList<T, L, LP>
 }
+
+// LinkedList impls
 
 impl<T, L, LP> LinkedList<T, L, LP>
     where T: DerefMut,
@@ -696,6 +614,104 @@ impl<T, L, LP> Ord for LinkedList<T, L, LP>
     }
 }
 
+// Sentinel impls
+
+impl<T, L> Default for Sentinel<T, L>
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T> + Default
+{
+    fn default() -> Sentinel<T, L> {
+        Sentinel { links: Default::default(), _marker: PhantomData }
+    }
+}
+
+#[unsafe_destructor]
+impl<T, L> Drop for Sentinel<T, L>
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T>
+{
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
+
+impl<T, L> Sentinel<T, L>
+    where T: DerefMut,
+          T::Target: Node<T, L>,
+          L: Linkable<T>
+{
+    #[inline]
+    pub fn new(l: L) -> Sentinel<T, L> {
+        Sentinel { links: l, _marker: PhantomData }
+    }
+
+    fn clear(&mut self) {
+        // remove the elements using a loop, ensuring not to have a recursive
+        // destruction
+        while let Some(mut link) = self.links.get_next_mut().take() {
+            *self.links.get_next_mut() = link.get_next_mut().take();
+            link.get_pprev_mut().take();
+        }
+
+        *self.links.get_pprev_mut() = Rawlink::none();
+    }
+
+    fn get_head(&self) -> &Link<T> { self.links.get_next() }
+    fn get_head_mut(&mut self) -> &mut Link<T> {
+        self.links.get_next_mut()
+    }
+    fn get_ptail(&self) -> &Rawlink<L> {
+        self.links.get_pprev()
+    }
+    fn get_ptail_mut(&mut self) -> &mut Rawlink<L> {
+        self.links.get_pprev_mut()
+    }
+}
+
+// Links impls
+
+impl<T> Default for Links<T> {
+    fn default() -> Links<T> {
+        Links { next: None, pprev: Rawlink::none() }
+    }
+}
+
+#[unsafe_destructor]
+impl<T> Drop for Links<T> {
+    fn drop(&mut self) {
+        self.check_links()
+    }
+}
+
+unsafe impl<T> Linkable<T> for Links<T> {
+    fn get_next(&self) -> &Link<T> { &self.next }
+
+    fn get_next_mut(&mut self) -> &mut Link<T> { &mut self.next }
+
+    fn get_pprev(&self) -> &Rawlink<Self> { &self.pprev }
+
+    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self> { &mut self.pprev }
+}
+
+impl<T> Links<T> {
+    #[inline]
+    pub fn new() -> Links<T> { Default::default() }
+}
+
+// Iter impls
+
+impl<'a, T, L: Linkable<T>> Clone for Iter<'a, T, L> {
+    fn clone(&self) -> Iter<'a, T, L> {
+        Iter {
+            head: self.head.clone(),
+            tail: self.tail,
+            nelem: self.nelem,
+        }
+    }
+}
+
 impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
     where T: DerefMut + 'a,
           T::Target: Node<T, L> + 'a,
@@ -744,6 +760,8 @@ impl<'a, T, L: Linkable<T>> ExactSizeIterator for Iter<'a, T, L>
           T::Target: Node<T, L> + 'a,
           L: Linkable<T>
 {}
+
+// IterMut impls
 
 impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
     where T: DerefMut + 'a,
@@ -854,6 +872,8 @@ impl<'a, T, L, LP> IterMut<'a, T, L, LP>
     }
 }
 
+// IntoIter impls
+
 impl<T, L, LP> Iterator for IntoIter<T, L, LP>
     where T: DerefMut,
           T::Target: Node<T, L>,
@@ -893,6 +913,10 @@ impl<T, L, LP> Clone for IntoIter<T, L, LP>
     }
 }
 
+
+///////////
+// Tests //
+///////////
 
 #[cfg(test)]
 mod tests {
