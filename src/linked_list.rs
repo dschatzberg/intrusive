@@ -33,6 +33,14 @@ use std::boxed;
 // Trait Definitions //
 ///////////////////////
 
+/// A trait that allows insertion into a `LinkedList`.
+
+/// The trait is unsafe to implement due to the following constraints:
+/// 1) The deref functions must always return the same reference
+/// 2) The object cannot be moved while in the `LinkedList`
+/// 3) No references (mutable or otherwise) to the target can be used while
+///      list operations are ongoing
+//  Box and &mut both fulfill these requirements
 pub unsafe trait OwningPointer : DerefMut
 {
     unsafe fn from_raw(raw: *mut Self::Target) -> Self;
@@ -41,6 +49,9 @@ pub unsafe trait OwningPointer : DerefMut
 }
 
 /// A trait that allows a struct to be inserted into a `LinkedList`
+///
+/// Rather than implement this directly, it is expected to use the
+/// `define_list_link` macro.
 pub unsafe trait Node<L>
     where L: Linkable<Container=Self>
 {
@@ -77,16 +88,24 @@ pub unsafe trait Linkable : Default + Sized
 
     fn get_links(&self) -> &Links<Self>;
     fn get_links_mut(&mut self) -> &mut Links<Self>;
-    fn get_next(&self) -> &Rawlink<Self> {
+    fn get_next<'a>(&'a self) -> &'a Rawlink<Self>
+        where Self: 'a, Self::Container: 'a
+    {
         &self.get_links().next
     }
-    fn get_next_mut(&mut self) -> &mut Rawlink<Self> {
+    fn get_next_mut<'a>(&'a mut self) -> &'a mut Rawlink<Self>
+        where Self: 'a, Self::Container: 'a
+    {
         &mut self.get_links_mut().next
     }
-    fn get_prev(&self) -> &Rawlink<Self> {
+    fn get_prev<'a>(&'a self) -> &'a Rawlink<Self>
+        where Self: 'a, Self::Container: 'a
+    {
         &self.get_links().prev
     }
-    fn get_prev_mut(&mut self) -> &mut Rawlink<Self> {
+    fn get_prev_mut<'a>(&'a mut self) -> &'a mut Rawlink<Self>
+        where Self: 'a, Self::Container: 'a
+    {
         &mut self.get_links_mut().prev
     }
     fn offset() -> usize;
@@ -188,6 +207,8 @@ macro_rules! impl_list_node {
 
 /// An intrusive doubly-linked list
 pub struct LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          L: Linkable<Container=T::Target>
 {
     length: usize,
     head: Rawlink<L>,
@@ -196,7 +217,7 @@ pub struct LinkedList<T, S, L>
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Links<L>
+pub struct Links<L: Linkable>
 {
     prev: Rawlink<L>,
     next: Rawlink<L>
@@ -222,6 +243,8 @@ pub struct IterMut<'a, T, S, L>
 }
 
 pub struct IntoIter<T, S, L>
+    where T: OwningPointer<Target=S>,
+          L: Linkable<Container=T::Target>
 {
     list: LinkedList<T, S, L>
 }
@@ -543,6 +566,24 @@ impl<T, S, L> fmt::Debug for LinkedList<T, S, L>
     }
 }
 
+impl<T, S, L> Drop for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          L: Linkable<Container=T::Target>
+{
+    fn drop(&mut self) {
+        loop {
+            if self.length == 0 {
+                return;
+            }
+            let head = self.head.resolve_mut().unwrap();
+            self.head = *head.get_next();
+            head.get_next_mut().take();
+            head.get_prev_mut().take();
+            self.length -= 1;
+        }
+    }
+}
+
 impl<T, S, L> Hash for LinkedList<T, S, L>
     where T: OwningPointer<Target=S>,
           S: Node<L> + Hash,
@@ -656,6 +697,16 @@ impl<T, S, L> Ord for LinkedList<T, S, L>
 {
     fn cmp(&self, other: &LinkedList<T, S, L>) -> Ordering {
         iter::order::cmp(self.iter(), other.iter())
+    }
+}
+
+// Links impls
+
+impl<L: Linkable> Drop for Links<L>
+{
+    fn drop(&mut self) {
+        assert!(self.next.resolve().is_none());
+        assert!(self.prev.resolve().is_none());
     }
 }
 
