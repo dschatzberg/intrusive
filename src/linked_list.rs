@@ -25,14 +25,23 @@ use core::marker::PhantomData;
 use core::ops::DerefMut;
 use core::prelude::*;
 use super::rawlink::Rawlink;
+#[cfg(not(feature="nostd"))]
+use std::boxed;
 
 ///////////////////////
 // Trait Definitions //
 ///////////////////////
 
+pub unsafe trait OwningPointer : DerefMut
+{
+    unsafe fn from_raw(raw: *mut Self::Target) -> Self;
+
+    unsafe fn take(self);
+}
+
 /// A trait that allows a struct to be inserted into a `LinkedList`
-pub trait Node<T, L>
-    where L: Linkable<T>
+pub unsafe trait Node<L>
+    where L: Linkable<Container=Self>
 {
     /// Getter for links
     fn get_links(&self) -> &L;
@@ -40,37 +49,136 @@ pub trait Node<T, L>
     /// Getter for mutable links
     fn get_links_mut(&mut self) -> &mut L;
 
-    fn get_next<'a>(&'a self) -> &Link<T> where L: 'a {
-        &self.get_links().get_next()
+    fn get_next(&self) -> &Rawlink<L> {
+        self.get_links().get_next()
     }
 
-    fn get_next_mut<'a>(&'a mut self) -> &mut Link<T> where L: 'a {
+    fn get_next_mut(&mut self) -> &mut Rawlink<L> {
         self.get_links_mut().get_next_mut()
     }
 
-    fn get_pprev<'a>(&'a self) -> &Rawlink<L> where L: 'a {
-        &self.get_links().get_pprev()
+    fn get_prev(&self) -> &Rawlink<L> {
+        self.get_links().get_prev()
     }
 
-    fn get_pprev_mut<'a>(&'a mut self) -> &mut Rawlink<L> where L: 'a {
-        self.get_links_mut().get_pprev_mut()
+    fn get_prev_mut(&mut self) -> &mut Rawlink<L> {
+        self.get_links_mut().get_prev_mut()
     }
-}
+ }
 
 /// Link trait allowing a struct to be inserted into a `LinkedList`
 ///
 /// The trait is unsafe because any implementation must impl Drop to call
 /// check_links()
-pub unsafe trait Linkable<T> : Sized
+pub unsafe trait Linkable : Default + Sized
 {
-    fn get_next(&self) -> &Link<T>;
-    fn get_next_mut(&mut self) -> &mut Link<T>;
-    fn get_pprev(&self) -> &Rawlink<Self>;
-    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self>;
-    fn check_links(&self) {
-        assert!(self.get_next().is_none());
-        assert!(self.get_pprev().resolve_immut().is_none());
+    type Container: ?Sized;
+
+    fn get_links(&self) -> &Links<Self>;
+    fn get_links_mut(&mut self) -> &mut Links<Self>;
+    fn get_next(&self) -> &Rawlink<Self> {
+        &self.get_links().next
     }
+    fn get_next_mut(&mut self) -> &mut Rawlink<Self> {
+        &mut self.get_links_mut().next
+    }
+    fn get_prev(&self) -> &Rawlink<Self> {
+        &self.get_links().prev
+    }
+    fn get_prev_mut(&mut self) -> &mut Rawlink<Self> {
+        &mut self.get_links_mut().prev
+    }
+    fn offset() -> usize;
+    unsafe fn container_of(&self) -> &Self::Container {
+        let mut val = self as *const _ as usize;
+        val -= Self::offset();
+        &*(val as *const _)
+    }
+    unsafe fn container_of_mut(&mut self) -> &mut Self::Container {
+        let mut val = self as *const _ as usize;
+        val -= Self::offset();
+        &mut *(val as *mut _)
+    }
+    fn check_links(&self) {
+        assert!(self.get_next().resolve().is_none());
+        assert!(self.get_prev().resolve().is_none());
+    }
+}
+
+///////////////////////
+// Macro Definitions //
+///////////////////////
+
+#[macro_export]
+macro_rules! offset_of {
+    ($container:ty : $field:ident) => (unsafe {
+        &(*(0usize as *const $container)).$field as *const _ as usize
+    });
+}
+
+#[macro_export]
+macro_rules! define_list_link {
+    ($link:ident = $container:ty : $field:ident) => (
+        declare_list_link!($link);
+        impl_list_link!($link = $container : $field);
+        impl_list_node!($link = $container : $field);
+    );
+    (pub $link:ident = $container:ty : $field:ident) => (
+        declare_list_link!(pub $link);
+        impl_list_link!($link = $container : $field);
+        impl_list_node!($link = $container : $field);
+    );
+}
+
+macro_rules! declare_list_link {
+    ($link:ident) => (
+        #[derive(Clone, Default, Debug)]
+        struct $link($crate::linked_list::Links<$link>);
+    );
+    (pub $link:ident) => (
+        #[derive(Clone, Default, Debug)]
+        pub struct $link($crate::linked_list::Links<$link>);
+    );
+}
+
+macro_rules! impl_list_link {
+    ($link:ident = $container:ty : $field:ident) => (
+        unsafe impl $crate::linked_list::Linkable for $link {
+            type Container = $container;
+
+            #[inline]
+            fn get_links(&self) -> &$crate::linked_list::Links<$link> {
+                &self.0
+            }
+
+            #[inline]
+            fn get_links_mut(&mut self) ->
+                &mut $crate::linked_list::Links<$link> {
+                &mut self.0
+            }
+
+            #[inline]
+            fn offset() -> usize {
+                offset_of!($container : $field)
+            }
+        }
+    );
+}
+
+macro_rules! impl_list_node {
+    ($link:ident = $container:ty : $field:ident) => (
+        unsafe impl $crate::linked_list::Node<$link> for $container {
+            #[inline]
+            fn get_links(&self) -> &$link {
+                &self.$field
+            }
+
+            #[inline]
+            fn get_links_mut(&mut self) -> &mut $link {
+                &mut self.$field
+            }
+        }
+    );
 }
 
 ////////////////////////
@@ -78,73 +186,56 @@ pub unsafe trait Linkable<T> : Sized
 ////////////////////////
 
 /// An intrusive doubly-linked list
-pub struct LinkedList<T, L, LP>
-    where LP: DerefMut<Target=Sentinel<T, L>>
+pub struct LinkedList<T, S, L>
 {
     length: usize,
-    sentinel: LP,
-}
-
-pub struct Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    links: L,
+    head: Rawlink<L>,
     _marker: PhantomData<T>,
+    _marker2: PhantomData<S>
 }
 
-#[derive(Clone, Debug)]
-pub struct Links<T> {
-    next: Link<T>,
-    pprev: Rawlink<Links<T>>,
+#[derive(Clone, Default, Debug)]
+pub struct Links<L>
+{
+    prev: Rawlink<L>,
+    next: Rawlink<L>
 }
-
-type Link<T> = Option<T>;
 
 /// An iterator over references to the items of a `LinkedList`
-pub struct Iter<'a, T:'a, L: Linkable<T> + 'a> {
-    head: &'a Link<T>,
+pub struct Iter<T, L: Linkable<Container=T>> {
+    head: Rawlink<L>,
     tail: Rawlink<L>,
     nelem: usize,
 }
 
 /// An iterator over mutable references to the items of a `LinkedList`
-pub struct IterMut<'a, T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T> + 'a,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+pub struct IterMut<'a, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
-    list: &'a mut LinkedList<T, L, LP>,
-    head: Rawlink<T::Target>,
-    tail: Rawlink<T::Target>,
+    list: &'a mut LinkedList<T, S, L>,
+    head: Rawlink<L>,
+    tail: Rawlink<L>,
     nelem: usize,
 }
 
-/// An iterator over mutable references to the items of a `LinkedList`
-pub struct IntoIter<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+pub struct IntoIter<T, S, L>
 {
-    list: LinkedList<T, L, LP>
+    list: LinkedList<T, S, L>
 }
 
 // LinkedList impls
 
-impl<T, L, LP> LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
-    /// Creates an empty `LinkedList`
     #[inline]
-    pub fn new_with_sentinel(mut sentinel: LP) -> LinkedList<T, L, LP> {
-        sentinel.clear();
-        LinkedList{length: 0, sentinel: sentinel}
+    pub fn new() -> LinkedList<T, S, L> {
+        LinkedList { length: 0, head: Rawlink::none(),
+                     _marker: PhantomData, _marker2: PhantomData }
     }
 
     /// Moves all elements from `other` to the end of the list.
@@ -153,40 +244,24 @@ impl<T, L, LP> LinkedList<T, L, LP>
     /// this operation, `other` becomes empty.
     ///
     /// This operation should compute in O(1) time and O(1) memory.
-    pub fn append<LPO>(&mut self, other: &mut LinkedList<T, L, LPO>)
-        where LPO: DerefMut<Target=Sentinel<T, L>>
-    {
-        match self.sentinel.get_ptail_mut().resolve() {
+    pub fn append(&mut self, other: &mut LinkedList<T, S, L>) {
+        match self.head.resolve_mut() {
             None => {
                 self.length = other.length;
-                if let Some(ref mut other_head) = *other.sentinel.get_head_mut() {
-                    *other_head.get_pprev_mut() =
-                        Rawlink::some(&mut self.sentinel.links);
-                }
-                *self.sentinel.get_head_mut() =
-                    other.sentinel.get_head_mut().take();
-                *self.sentinel.get_ptail_mut() = if other.length == 1 {
-                    Rawlink::some(&mut self.sentinel.links)
-                } else {
-                    other.sentinel.get_ptail_mut().take()
-                }
+                self.head = other.head.take();
             },
-            Some(mut ptail) => {
-                let tail = ptail.get_next_mut().as_mut().unwrap();
-                let o_tail = other.sentinel.get_ptail_mut().take();
-                let o_length = other.length;
-                match other.sentinel.get_head_mut().take() {
+            Some(head) => {
+                let tail = head.get_prev_mut().resolve_mut().unwrap();
+                match other.head.take().resolve_mut() {
                     None => return,
-                    Some(mut node) => {
-                        *node.get_pprev_mut() =
-                            Rawlink::some(tail.get_links_mut());
-                        *tail.get_next_mut() = Some(node);
-                        self.length += o_length;
-                        *self.sentinel.get_ptail_mut() = if o_length == 1 {
-                            Rawlink::some(tail.get_links_mut())
-                        } else {
-                            o_tail
-                        }
+                    Some(other_head) => {
+                        let other_tail =
+                            other_head.get_prev_mut().resolve_mut().unwrap();
+                        *other_tail.get_next_mut() = Rawlink::some(head);
+                        *other_head.get_prev_mut() = Rawlink::some(tail);
+                        *tail.get_next_mut() = Rawlink::some(other_head);
+                        *head.get_prev_mut() = Rawlink::some(other_tail);
+                        self.length += other.length;
                     }
                 }
             }
@@ -197,14 +272,19 @@ impl<T, L, LP> LinkedList<T, L, LP>
 
     /// Provides a forward iterator.
     #[inline]
-    pub fn iter(&self) -> Iter<T, L> {
-        Iter{nelem: self.len(), head: self.sentinel.get_head(),
-             tail: *self.sentinel.get_ptail()}
+    pub fn iter(&self) -> Iter<S, L> {
+        let tail = if self.length == 0 {
+            Rawlink::none()
+        } else {
+            *self.head.resolve().unwrap().get_prev()
+        };
+        Iter{nelem: self.length, head: self.head,
+             tail: tail}
     }
 
     /// Consumes the list into an iterator yielding elements by value.
     #[inline]
-    pub fn into_iter(self) -> IntoIter<T, L, LP> {
+    pub fn into_iter(self) -> IntoIter<T, S, L> {
         IntoIter{list: self}
     }
 
@@ -227,35 +307,58 @@ impl<T, L, LP> LinkedList<T, L, LP>
     /// Provides a reference to the front element, or `None` if the list is
     /// empty.
     #[inline]
-    pub fn front(&self) -> Option<&T> {
-        self.sentinel.get_head().as_ref()
+    pub fn front(&self) -> Option<&T::Target> {
+        self.head.resolve().map(|head| unsafe {head.container_of()})
     }
 
     /// Provides a mutable reference to the front element, or `None` if the list
     /// is empty.
     #[inline]
-    pub fn front_mut(&mut self) -> Option<&mut T> {
-        self.sentinel.get_head_mut().as_mut()
+    pub fn front_mut(&mut self) -> Option<&mut T::Target> {
+        self.head.resolve_mut().map(|head| unsafe {head.container_of_mut()})
     }
 
     /// Provides a reference to the back element, or `None` if the list is
     /// empty.
     #[inline]
-    pub fn back(&self) -> Option<&T> {
-        // if pprev is not none, then it points to the link before the tail
-        self.sentinel.get_ptail().resolve_immut().map(|link| {
-            link.get_next().as_ref().unwrap()
+    pub fn back(&self) -> Option<&T::Target> {
+        self.head.resolve().map(|head| {
+            unsafe{head.get_prev().resolve().unwrap().container_of()}
         })
     }
 
     /// Provides a mutable reference to the back element, or `None` if the list
     /// is empty.
     #[inline]
-    pub fn back_mut(&mut self) -> Option<&mut T> {
+    pub fn back_mut(&mut self) -> Option<&mut T::Target> {
         // if pprev is not none, then it points to the link before the tail
-        self.sentinel.get_ptail_mut().resolve().map(|mut link| {
-            link.get_next_mut().as_mut().unwrap()
+        self.head.resolve_mut().map(|head| {
+            unsafe {
+                head.get_prev_mut().resolve_mut().unwrap().container_of_mut()
+            }
         })
+    }
+
+    fn insert(&mut self, elt: &mut L, prev: &mut L, next: &mut L) {
+        *next.get_prev_mut() = Rawlink::some(elt);
+        *elt.get_next_mut() = Rawlink::some(next);
+        *elt.get_prev_mut() = Rawlink::some(prev);
+        *prev.get_next_mut() = Rawlink::some(elt);
+        self.length += 1;
+    }
+
+    fn delete(&mut self, elt: &mut L) {
+        debug_assert!(*elt.get_next() != Rawlink::none());
+        debug_assert!(*elt.get_prev() != Rawlink::none());
+
+        let next = elt.get_next_mut().resolve_mut().unwrap();
+        let prev = elt.get_prev_mut().resolve_mut().unwrap();
+        *next.get_prev_mut() = Rawlink::some(prev);
+        *prev.get_next_mut() = Rawlink::some(next);
+
+        elt.get_next_mut().take();
+        elt.get_prev_mut().take();
+        self.length -= 1;
     }
 
     /// Adds an element first in the list.
@@ -266,25 +369,16 @@ impl<T, L, LP> LinkedList<T, L, LP>
         elt.get_links().check_links();
 
         if self.is_empty() {
-            // Point tail to sentinel
-            *self.sentinel.get_ptail_mut() =
-                Rawlink::some(&mut self.sentinel.links);
+            *elt.get_next_mut() = Rawlink::some(elt.get_links_mut());
+            *elt.get_prev_mut() = Rawlink::some(elt.get_links_mut());
+            self.length += 1;
         } else {
-            if self.len() == 1 {
-                // need to advance tail pointer
-                *self.sentinel.get_ptail_mut() =
-                    Rawlink::some(elt.get_links_mut());
-            }
-            // Chain head backwards to elt
-            *self.front_mut().unwrap().get_pprev_mut() =
-                Rawlink::some(elt.get_links_mut());
+            let head = self.head.resolve_mut().unwrap();
+            let tail = head.get_prev_mut().resolve_mut().unwrap();
+            self.insert(elt.get_links_mut(), tail, head);
         }
-        // Chain elt into the list
-        *elt.get_next_mut() = self.sentinel.get_head_mut().take();
-        *elt.get_pprev_mut() = Rawlink::some(&mut self.sentinel.links);
-        // Set it as the new head
-        *self.sentinel.get_head_mut() = Some(elt);
-        self.length += 1;
+        self.head = Rawlink::some(elt.get_links_mut());
+        unsafe { elt.take() };
     }
 
     /// Removes the first element and returns it, or `None` if the list is
@@ -292,40 +386,16 @@ impl<T, L, LP> LinkedList<T, L, LP>
     ///
     /// This operation should compute in O(1) time.
     pub fn pop_front(&mut self) -> Option<T> {
-        self.sentinel.get_head_mut().take().map(|mut front| {
-            self.length -= 1;
-            front.get_pprev_mut().take();
-            let mut next_link = front.get_next_mut().take();
-            if self.length == 0 {
-                // the list will be empty, clear the tail pointer
-                *self.sentinel.get_ptail_mut() = Rawlink::none();
+        self.head.take().resolve_mut().map(|mut head| {
+            if self.length == 1 {
+                self.head = Rawlink::none();
             } else {
-                if self.length == 1 {
-                    *self.sentinel.get_ptail_mut() =
-                        Rawlink::some(&mut self.sentinel.links);
-                }
-                *next_link.as_mut().unwrap().get_pprev_mut() =
-                    Rawlink::some(&mut self.sentinel.links);
+                self.head = *head.get_next_mut();
             }
-            // if let Some(ref mut next) = next_link {
-            //     // chain the following element to the list
-            //     *next.get_pprev_mut() = Rawlink::some(&mut self.sentinel.links);
-            // } else {
-            //     // the list will be empty, clear the tail pointer
-            //     *self.sentinel.get_ptail_mut() = Rawlink::none();
-            // }
-            // // If the length is one now, move the tail back
-            // if self.length == 1 {
-            //     self.sentinel.get_ptail_mut
-            // }
-            // if let Some(ptail) = self.sentinel.get_ptail_mut().resolve() {
-            //     if ptail as *const L == front.get_links() as *const L {
-
-            //     }
-            // }
-
-            *self.sentinel.get_head_mut() = next_link;
-            front
+            self.delete(head);
+            unsafe {
+                T::from_raw(head.container_of_mut() as *mut _)
+            }
         })
     }
 
@@ -333,21 +403,17 @@ impl<T, L, LP> LinkedList<T, L, LP>
     ///
     /// This operation should compute in O(1) time.
     pub fn push_back(&mut self, mut elt: T) {
+        if self.is_empty() {
+            return self.push_front(elt);
+        }
+
         // ensure links are not already being used
         elt.get_links().check_links();
 
-        match self.sentinel.get_ptail_mut().resolve() {
-            None => return self.push_front(elt),
-            Some(ref mut ptail) => {
-                let mut tail = ptail.get_next_mut().as_mut().unwrap();
-                *elt.get_pprev_mut() = Rawlink::some(tail.get_links_mut());
-                *tail.get_next_mut() = Some(elt);
-                // advance the ptail pointer in the sentinel
-                *self.sentinel.get_ptail_mut() =
-                    Rawlink::some(tail.get_links_mut());
-                self.length += 1;
-            }
-        }
+        let head = self.head.resolve_mut().unwrap();
+        let tail = head.get_prev_mut().resolve_mut().unwrap();
+        self.insert(elt.get_links_mut(), tail, head);
+        unsafe { elt.take() };
     }
 
     /// Removes the last element from a list and returns it, or `None` if
@@ -356,142 +422,130 @@ impl<T, L, LP> LinkedList<T, L, LP>
     /// This operation should compute in O(1) time
     pub fn pop_back(&mut self) -> Option<T> {
         if self.len() <= 1 { return self.pop_front(); }
-        self.length -= 1;
-        let mut ptail = self.sentinel.get_ptail_mut().resolve().take().unwrap();
-        let mut tail = ptail.get_next_mut().take().unwrap();
-        // clear the links
-        debug_assert!(tail.get_next().is_none());
-        tail.get_pprev_mut().take();
-        // step the tail pointer back
-        *self.sentinel.get_ptail_mut() = *ptail.get_pprev();
-        Some(tail)
+
+        let head = self.head.resolve_mut().unwrap();
+        let tail = head.get_prev_mut().resolve_mut().unwrap();
+        self.delete(tail);
+        Some(unsafe {T::from_raw(tail.container_of_mut() as *mut _)})
     }
 }
 
-impl<'a, T, L, LP> LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<'a, T, S, L> LinkedList<T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
-    // Provides a forward iterator with mutable references.
+    /// Provides a forward iterator with mutable references
     #[inline]
-    pub fn iter_mut(&'a mut self) -> IterMut<'a, T, L, LP> {
-        let head_raw = match *self.sentinel.get_head_mut() {
-            Some(ref mut h) => Rawlink::some(h.deref_mut()),
-            None => Rawlink::none(),
-        };
-        let tail_raw = match self.sentinel.get_ptail_mut().resolve() {
-            Some(ref mut pt) => {
-                Rawlink::some(pt.get_next_mut().as_mut().unwrap().deref_mut())
-            }
-            None => Rawlink::none(),
+    pub fn iter_mut(&'a mut self) -> IterMut<'a, T, S, L> {
+        let tail = if self.length == 0 {
+            Rawlink::none()
+        } else {
+            *self.head.resolve().unwrap().get_prev()
         };
         IterMut {
-            nelem: self.len(),
-            head: head_raw,
-            tail: tail_raw,
+            nelem: self.length,
+            head: self.head,
+            tail: tail,
             list: self
         }
     }
 }
 
-impl<T, L, LP> Default for LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default,
-          LP: DerefMut<Target=Sentinel<T, L>> + Default
+impl<T, S, L> Default for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     #[inline]
-    fn default() -> LinkedList<T, L, LP> {
-        LinkedList::new_with_sentinel(Default::default())
+    fn default() -> LinkedList<T, S, L> {
+        LinkedList::new()
     }
 }
 
-impl<T, L, LP> LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default,
-          LP: DerefMut<Target=Sentinel<T, L>> + Default
+// impl<T, L, LP> LinkedList<T, L, LP>
+//     where T: DerefMut,
+//           T::Target: Node<T, L>,
+//           L: Linkable<T> + Default,
+//           LP: DerefMut<Target=Sentinel<T, L>> + Default
+// {
+//     // /// Splits the list into two at the given index. Returns everything after the given index,
+//     // /// including the index.
+//     // ///
+//     // /// # Panics
+//     // ///
+//     // /// Panics if `at > len`.
+//     // ///
+//     // /// This operation should compute in O(n) time.
+//     // pub fn split_off(&mut self, at: usize) -> LinkedList<T, L, LP> {
+//     //     let len = self.len();
+//     //     assert!(at <= len, "Cannot split off at a nonexistent index");
+//     //     if at == 0 {
+//     //         return mem::replace(self, LinkedList::new());
+//     //     } else if at == len {
+//     //         return LinkedList::new();
+//     //     }
+
+//     //     let mut iter = self.iter_mut();
+//     //     // instead of skipping using .skip() (which creates a new struct),
+//     //     // we skip manually so we can access the head field without
+//     //     // depending on implementation details of Skip
+//     //     for _ in 0..at - 1 {
+//     //         iter.next();
+//     //     }
+//     //     let mut split_node = iter.head;
+
+//     //     let mut splitted_list = LinkedList {
+//     //         sentinel: Default::default();
+//     //         length: len - at
+//     //     }
+
+//     //     mem::swap(&mut split_node.resolve().unwrap().next, &mut splitted_list.list_head);
+//     //     self.list_tail = split_node;
+//     //     self.length = at;
+
+//     //     splitted_list
+//     // }
+// }
+
+impl<T, S, L> Clone for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S> + Clone,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
-    #[inline]
-    pub fn new() -> LinkedList<T, L, LP> {
-        LinkedList::new_with_sentinel(Default::default())
-    }
-
-    // /// Splits the list into two at the given index. Returns everything after the given index,
-    // /// including the index.
-    // ///
-    // /// # Panics
-    // ///
-    // /// Panics if `at > len`.
-    // ///
-    // /// This operation should compute in O(n) time.
-    // pub fn split_off(&mut self, at: usize) -> LinkedList<T, L, LP> {
-    //     let len = self.len();
-    //     assert!(at <= len, "Cannot split off at a nonexistent index");
-    //     if at == 0 {
-    //         return mem::replace(self, LinkedList::new());
-    //     } else if at == len {
-    //         return LinkedList::new();
-    //     }
-
-    //     let mut iter = self.iter_mut();
-    //     // instead of skipping using .skip() (which creates a new struct),
-    //     // we skip manually so we can access the head field without
-    //     // depending on implementation details of Skip
-    //     for _ in 0..at - 1 {
-    //         iter.next();
-    //     }
-    //     let mut split_node = iter.head;
-
-    //     let mut splitted_list = LinkedList {
-    //         sentinel: Default::default();
-    //         length: len - at
-    //     }
-
-    //     mem::swap(&mut split_node.resolve().unwrap().next, &mut splitted_list.list_head);
-    //     self.list_tail = split_node;
-    //     self.length = at;
-
-    //     splitted_list
-    // }
-}
-
-impl<T, L, LP> Clone for LinkedList<T, L, LP>
-    where T: DerefMut + Clone,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default,
-          LP: DerefMut<Target=Sentinel<T, L>> + Default
-{
-    fn clone(&self) -> LinkedList<T, L, LP> {
-        self.iter().cloned().collect()
+    fn clone(&self) -> LinkedList<T, S, L> {
+        self.iter().map(|x| {
+            unsafe {
+                let t = T::from_raw(x as *const S as *mut S);
+                let ret = t.clone();
+                t.take();
+                ret
+            }
+        }).collect()
     }
 }
 
-impl<T, L, LP> fmt::Debug for LinkedList<T, L, LP>
-    where T: DerefMut + fmt::Debug,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> fmt::Debug for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + fmt::Debug,
+          L: Linkable<Container=T::Target>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "["));
 
         for (i, e) in self.iter().enumerate() {
             if i != 0 { try!(write!(f, ", ")); }
-            try!(write!(f, "{:?}", *e));
+            try!(write!(f, "{:?}", e));
         }
 
         write!(f, "]")
     }
 }
 
-impl<T, L, LP> Hash for LinkedList<T, L, LP>
-    where T: DerefMut + Hash,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> Hash for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + Hash,
+          L: Linkable<Container=T::Target>
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.len().hash(state);
@@ -501,221 +555,123 @@ impl<T, L, LP> Hash for LinkedList<T, L, LP>
     }
 }
 
-impl<T, L, LP> Extend<T> for LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> Extend<T> for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
         for elt in iter { self.push_back(elt); }
     }
 }
 
-impl<T, L, LP> FromIterator<T> for LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default,
-          LP: DerefMut<Target=Sentinel<T, L>> + Default
+impl<T, S, L> FromIterator<T> for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> LinkedList<T, L, LP> {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> LinkedList<T, S, L> {
         let mut ret = LinkedList::new();
         ret.extend(iter);
         ret
     }
 }
 
-impl<T, L, LP> IntoIterator for LinkedList<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> IntoIterator for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     type Item = T;
-    type IntoIter = IntoIter<T, L, LP>;
+    type IntoIter = IntoIter<T, S, L>;
 
-    fn into_iter(self) -> IntoIter<T, L, LP> {
+    fn into_iter(self) -> IntoIter<T, S, L> {
         self.into_iter()
     }
 }
 
-impl<'a, T, L, LP> IntoIterator for &'a LinkedList<T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<'a, T, S, L> IntoIterator for &'a LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
-    type Item = &'a T;
-    type IntoIter = Iter<'a, T, L>;
+    type Item = &'a S;
+    type IntoIter = Iter<S, L>;
 
-    fn into_iter(self) -> Iter<'a, T, L> {
+    fn into_iter(self) -> Iter<S, L> {
         self.iter()
     }
 }
 
-impl<'a, T, L, LP> IntoIterator for &'a mut LinkedList<T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+impl<'a, T, S, L> IntoIterator for &'a mut LinkedList<T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
-    type Item = &'a mut T;
-    type IntoIter = IterMut<'a, T, L, LP>;
+    type Item = &'a mut S;
+    type IntoIter = IterMut<'a, T, S, L>;
 
-    fn into_iter(self) -> IterMut<'a, T, L, LP> {
+    fn into_iter(self) -> IterMut<'a, T, S, L> {
         self.iter_mut()
     }
 }
 
 
-impl<T, L, LP> PartialEq for LinkedList<T, L, LP>
-    where T: DerefMut + PartialEq,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>,
+impl<T, S, L> PartialEq for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + PartialEq,
+          L: Linkable<Container=T::Target>
 {
-    fn eq(&self, other: &LinkedList<T, L, LP>) -> bool {
+    fn eq(&self, other: &LinkedList<T, S, L>) -> bool {
         self.len() == other.len() &&
             iter::order::eq(self.iter(), other.iter())
     }
 
-    fn ne(&self, other: &LinkedList<T, L, LP>) -> bool {
+    fn ne(&self, other: &LinkedList<T, S, L>) -> bool {
         self.len() != other.len() ||
             iter::order::ne(self.iter(), other.iter())
     }
 }
 
-impl<T, L, LP> Eq for LinkedList<T, L, LP>
-    where T: DerefMut + PartialEq,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>,
+impl<T, S, L> Eq for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + Eq,
+          L: Linkable<Container=T::Target>
 {}
 
-impl<T, L, LP> PartialOrd for LinkedList<T, L, LP>
-    where T: DerefMut + PartialOrd,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> PartialOrd for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + PartialOrd,
+          L: Linkable<Container=T::Target>
 {
-    fn partial_cmp(&self, other: &LinkedList<T, L, LP>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &LinkedList<T, S, L>) -> Option<Ordering> {
         iter::order::partial_cmp(self.iter(), other.iter())
     }
 }
 
-impl<T, L, LP> Ord for LinkedList<T, L, LP>
-    where T: DerefMut + Ord,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> Ord for LinkedList<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L> + Ord,
+          L: Linkable<Container=T::Target>
 {
-    fn cmp(&self, other: &LinkedList<T, L, LP>) -> Ordering {
+    fn cmp(&self, other: &LinkedList<T, S, L>) -> Ordering {
         iter::order::cmp(self.iter(), other.iter())
     }
 }
 
-// Sentinel impls
-
-impl<T, L> Default for Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default
-{
-    fn default() -> Sentinel<T, L> {
-        Sentinel { links: Default::default(), _marker: PhantomData }
-    }
-}
-
-#[unsafe_destructor]
-impl<T, L> Drop for Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-impl<T, L> Sentinel<T, L>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>
-{
-    #[inline]
-    pub fn new(l: L) -> Sentinel<T, L> {
-        Sentinel { links: l, _marker: PhantomData }
-    }
-
-    fn clear(&mut self) {
-        // remove the elements using a loop, ensuring not to have a recursive
-        // destruction
-        while let Some(mut link) = self.links.get_next_mut().take() {
-            *self.links.get_next_mut() = link.get_next_mut().take();
-            link.get_pprev_mut().take();
-        }
-
-        *self.links.get_pprev_mut() = Rawlink::none();
-    }
-
-    fn get_head(&self) -> &Link<T> { self.links.get_next() }
-    fn get_head_mut(&mut self) -> &mut Link<T> {
-        self.links.get_next_mut()
-    }
-    fn get_ptail(&self) -> &Rawlink<L> {
-        self.links.get_pprev()
-    }
-    fn get_ptail_mut(&mut self) -> &mut Rawlink<L> {
-        self.links.get_pprev_mut()
-    }
-}
-
-// Links impls
-
-impl<T> Default for Links<T> {
-    fn default() -> Links<T> {
-        Links { next: None, pprev: Rawlink::none() }
-    }
-}
-
-#[unsafe_destructor]
-impl<T> Drop for Links<T> {
-    fn drop(&mut self) {
-        self.check_links()
-    }
-}
-
-unsafe impl<T> Linkable<T> for Links<T> {
-    fn get_next(&self) -> &Link<T> { &self.next }
-
-    fn get_next_mut(&mut self) -> &mut Link<T> { &mut self.next }
-
-    fn get_pprev(&self) -> &Rawlink<Self> { &self.pprev }
-
-    fn get_pprev_mut(&mut self) -> &mut Rawlink<Self> { &mut self.pprev }
-}
-
-impl<T> Links<T> {
-    #[inline]
-    pub fn new() -> Links<T> { Default::default() }
-}
-
 // Iter impls
 
-impl<'a, T, L: Linkable<T>> Clone for Iter<'a, T, L> {
-    fn clone(&self) -> Iter<'a, T, L> {
+impl<T, L: Linkable<Container=T>> Clone for Iter<T, L> {
+    fn clone(&self) -> Iter<T, L> {
         Iter {
-            head: self.head.clone(),
+            head: self.head,
             tail: self.tail,
             nelem: self.nelem,
         }
     }
 }
 
-impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + 'a,
-          L: Linkable<T>
+impl<'a, T: 'a, L: Linkable<Container=T> + 'a> Iterator for Iter<T, L>
 {
     type Item = &'a T;
 
@@ -724,11 +680,11 @@ impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
         if self.nelem == 0 {
             return None;
         }
-        self.head.as_ref().map(|head| {
-            self.nelem -= 1;
-            self.head = head.get_next();
-            head
-        })
+        let head = self.head.resolve().unwrap();
+        self.nelem -= 1;
+        self.head = *head.get_next();
+        let ret = unsafe { head.container_of() };
+        Some(ret)
     }
 
     #[inline]
@@ -737,53 +693,44 @@ impl<'a, T, L: Linkable<T>> Iterator for Iter<'a, T, L>
     }
 }
 
-impl<'a, T, L: Linkable<T>> DoubleEndedIterator for Iter<'a, T, L>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + 'a,
-          L: Linkable<T>
+impl<'a, T: 'a, L: Linkable<Container=T> + 'a> DoubleEndedIterator
+    for Iter<T, L>
 {
     #[inline]
     fn next_back(&mut self) -> Option<&'a T> {
         if self.nelem == 0 {
             return None;
         }
-        self.tail.resolve_immut().as_ref().map(|prev| {
-            self.nelem -= 1;
-            self.tail = *prev.get_pprev();
-            prev.get_next().as_ref().unwrap()
-        })
+        let tail = self.tail.resolve().unwrap();
+        self.nelem -= 1;
+        self.tail = *tail.get_prev();
+        let ret = unsafe { tail.container_of() };
+        Some(ret)
     }
 }
 
-impl<'a, T, L: Linkable<T>> ExactSizeIterator for Iter<'a, T, L>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + 'a,
-          L: Linkable<T>
-{}
+impl<'a, T: 'a, L: Linkable<Container=T> + 'a> ExactSizeIterator
+    for Iter<T, L> {}
 
-// IterMut impls
+// // IterMut impls
 
-impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+impl<'a, T, S, L> Iterator for IterMut<'a, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
-    type Item = &'a mut T;
+    type Item = &'a mut S;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a mut T> {
+    fn next(&mut self) -> Option<&'a mut S> {
         if self.nelem == 0 {
             return None;
         }
-        self.head.resolve().map(|next| {
-            self.nelem -= 1;
-            self.head = match *next.get_next_mut() {
-                Some(ref mut node) => Rawlink::some(node.deref_mut()),
-                None => Rawlink::none(),
-            };
-            next.get_pprev_mut().resolve().unwrap().get_next_mut().as_mut().unwrap()
-        })
+        let head = self.head.resolve_mut().unwrap();
+        self.nelem -= 1;
+        self.head = *head.get_next();
+        let ret = unsafe { head.container_of_mut() };
+        Some(ret)
     }
 
     #[inline]
@@ -792,42 +739,34 @@ impl<'a, T, L, LP> Iterator for IterMut<'a, T, L, LP>
     }
 }
 
-impl<'a, T, L, LP> DoubleEndedIterator for IterMut<'a, T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+impl<'a, T, S, L> DoubleEndedIterator for IterMut<'a, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
     #[inline]
-    fn next_back(&mut self) -> Option<&'a mut T> {
+    fn next_back(&mut self) -> Option<&'a mut S> {
         if self.nelem == 0 {
             return None;
         }
-        self.tail.resolve().map(|tail| {
-            self.nelem -= 1;
-            // have to iterate back twice then forwards once
-            let mut prev = tail.get_pprev_mut().resolve().unwrap();
-            self.tail = match prev.get_pprev_mut().resolve() {
-                Some(ref mut prevlinks) =>
-                    Rawlink::some(prevlinks.get_next_mut().as_mut().unwrap().deref_mut()),
-                None => Rawlink::none(),
-            };
-            prev.get_next_mut().as_mut().unwrap()
-        })
+        let tail = self.tail.resolve_mut().unwrap();
+        self.nelem -= 1;
+        self.tail = *tail.get_prev();
+        let ret = unsafe { tail.container_of_mut() };
+        Some(ret)
     }
 }
 
-impl<'a, T, L, LP> ExactSizeIterator for IterMut<'a, T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a {}
+impl<'a, T, S, L> ExactSizeIterator for IterMut<'a, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
+{}
 
-impl<'a, T, L, LP> IterMut<'a, T, L, LP>
-    where T: DerefMut + 'a,
-          T::Target: Node<T, L> + Sized + 'a,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>> + 'a
+impl<'a, T, S, L> IterMut<'a, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          S: Node<L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
 {
     /// Inserts `elt` just after the element most recently returned by `.next()`.
     /// The inserted element does not appear in the iteration.
@@ -836,49 +775,38 @@ impl<'a, T, L, LP> IterMut<'a, T, L, LP>
         // ensure links are not already being used
         elt.get_links().check_links();
 
-        match self.head.resolve() {
-            None => { self.list.push_back(elt); }
-            Some(mut node) => {
-                let mut prev_links = node.get_pprev_mut().resolve().unwrap();
-                if prev_links as *const L ==
-                    &self.list.sentinel.links as *const L {
-                        return self.list.push_front(elt);
-                    }
-                // Fix tail if needed
-                let tail = self.list.sentinel.get_ptail_mut().resolve().unwrap();
-                if tail as *const L == prev_links as *const L {
-                    *self.list.sentinel.get_ptail_mut() =
-                        Rawlink::some(elt.get_links_mut());
-                }
-                // insert
-                *node.get_pprev_mut() = Rawlink::some(elt.get_links_mut());
-                *elt.get_next_mut() = prev_links.get_next_mut().take();
-                *elt.get_pprev_mut() = Rawlink::some(prev_links);
-                *prev_links.get_next_mut() = Some(elt);
-                self.list.length += 1;
-            }
+        if self.nelem == 0 {
+            return self.list.push_back(elt);
         }
+
+        if self.head == self.list.head {
+            return self.list.push_front(elt);
+        }
+
+        let next = self.head.resolve_mut().unwrap();
+        let prev = next.get_prev_mut().resolve_mut().unwrap();
+        self.list.insert(elt.get_links_mut(), prev, next);
+        unsafe { elt.take() };
     }
 
     /// Provides a reference to the next element, without changing the iterator.
     #[inline]
-    pub fn peek_next(&mut self) -> Option<&mut T> {
+    pub fn peek_next(&mut self) -> Option<&'a mut S> {
         if self.nelem == 0 {
             return None
         }
-        self.head.resolve().map(|head| {
-            head.get_pprev_mut().resolve().unwrap().get_next_mut().as_mut().unwrap()
-        })
+        let head = self.head.resolve_mut().unwrap();
+        let ret = unsafe { head.container_of_mut() };
+        Some(ret)
     }
 }
 
 // IntoIter impls
 
-impl<T, L, LP> Iterator for IntoIter<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> Iterator for IntoIter<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     type Item = T;
 
@@ -891,28 +819,40 @@ impl<T, L, LP> Iterator for IntoIter<T, L, LP>
     }
 }
 
-impl<T, L, LP> DoubleEndedIterator for IntoIter<T, L, LP>
-    where T: DerefMut,
-          T::Target: Node<T, L>,
-          L: Linkable<T>,
-          LP: DerefMut<Target=Sentinel<T, L>>
+impl<T, S, L> DoubleEndedIterator for IntoIter<T, S, L>
+    where T: OwningPointer<Target=S>,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     #[inline]
     fn next_back(&mut self) -> Option<T> { self.list.pop_back() }
 }
 
-impl<T, L, LP> Clone for IntoIter<T, L, LP>
-    where T: DerefMut + Clone,
-          T::Target: Node<T, L>,
-          L: Linkable<T> + Default,
-          LP: DerefMut<Target=Sentinel<T, L>> + Default
+impl<T, S, L> Clone for IntoIter<T, S, L>
+    where T: OwningPointer<Target=S> + Clone,
+          S: Node<L>,
+          L: Linkable<Container=T::Target>
 {
     #[inline]
-    fn clone(&self) -> IntoIter<T, L, LP> {
+    fn clone(&self) -> IntoIter<T, S, L> {
         IntoIter { list: self.list.clone() }
     }
 }
 
+// OwningPointer impls
+
+#[cfg(any(test,not(feature="nostd")))]
+unsafe impl<T> OwningPointer for Box<T> {
+    #[inline]
+    unsafe fn from_raw(raw: *mut T) -> Box<T> {
+        Box::from_raw(raw)
+    }
+
+    #[inline]
+    unsafe fn take(self) {
+        boxed::into_raw(self);
+    }
+}
 
 ///////////
 // Tests //
@@ -925,15 +865,16 @@ mod tests {
     use std::default::Default;
     use std::hash::{self, Hash, Hasher, SipHasher};
     use std::fmt;
-    use std::ops::DerefMut;
     use std::thread;
+    use super::{LinkedList, OwningPointer, Node, Linkable};
     use rand;
-    use super::{LinkedList, Linkable, Links, Node, Sentinel};
 
     struct MyInt {
-        links: Links<Box<MyInt>>,
+        links: MyLink,
         i: i32,
     }
+
+    define_list_link!(MyLink = MyInt : links);
 
     impl Clone for MyInt {
         fn clone(&self) -> MyInt {
@@ -951,11 +892,6 @@ mod tests {
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.i.hash(state);
         }
-    }
-
-    impl Node<Box<MyInt>, Links<Box<MyInt>>> for MyInt {
-        fn get_links(&self) -> &Links<Box<MyInt>> { &self.links }
-        fn get_links_mut(&mut self) -> &mut Links<Box<MyInt>> { &mut self.links }
     }
 
     impl PartialEq for MyInt {
@@ -990,40 +926,40 @@ mod tests {
         }
     }
 
-    type ListAlias<T> = LinkedList<T, Links<T>, Box<Sentinel<T, Links<T>>>>;
-    type MyIntList = ListAlias<Box<MyInt>>;
-
-    pub fn check_links<T, L, LP>(list: &LinkedList<T, L, LP>)
-        where T: DerefMut,
-              T::Target: Node<T, L>,
-              L: Linkable<T> + fmt::Debug,
-              LP: DerefMut<Target=Sentinel<T, L>>
+    pub fn check_links<T, S, L>(list: &LinkedList<T, S, L>)
+        where T: OwningPointer<Target=S>,
+              S: Node<L>,
+              L: Linkable<Container=S> + fmt::Debug,
     {
         let mut len = 0;
-        let mut last_link = &list.sentinel.links;
-        let mut node_ptr: &T::Target;
-        match *list.sentinel.get_head() {
+        let mut head: &L;
+        let mut prev_links: &L;
+        let mut link_ptr: &L;
+        match list.head.resolve() {
             None => { assert_eq!(0, list.length); return }
-            Some(ref node) => node_ptr = &**node,
+            Some(ref links) => {
+                head = links;
+                link_ptr = links;
+                prev_links = links.get_prev().resolve().unwrap();
+            }
         }
+
         loop {
-            match node_ptr.get_pprev().resolve_immut() {
+            match link_ptr.get_prev().resolve() {
                 None => panic!("unset prev link"),
-                Some(pprev) => {
-                    assert_eq!(last_link as *const L, pprev as *const L);
+                Some(prev) => {
+                    assert_eq!(prev_links as *const L, prev as *const L);
                 }
             }
-            match *node_ptr.get_next() {
-                Some(ref next) => {
-                    last_link = node_ptr.get_links();
-                    node_ptr = &**next;
+            match link_ptr.get_next().resolve() {
+                None => panic!("unset next link"),
+                Some(next) => {
                     len += 1;
-                }
-                None => {
-                    assert_eq!(node_ptr.get_pprev(),
-                               list.sentinel.get_ptail());
-                    len += 1;
-                    break;
+                    if next as *const L == head as *const L {
+                        break;
+                    }
+                    prev_links = link_ptr;
+                    link_ptr = next;
                 }
             }
         }
@@ -1032,7 +968,7 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let mut m: MyIntList = LinkedList::new();
+        let mut m = LinkedList::new();
 
         assert_eq!(m.pop_front(), None);
         assert_eq!(m.pop_back(), None);
@@ -1053,7 +989,7 @@ mod tests {
         assert_eq!(m.pop_front(), Some(box MyInt::new(1)));
 
 
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         n.push_front(box MyInt::new(2));
         n.push_front(box MyInt::new(3));
         {
@@ -1073,17 +1009,17 @@ mod tests {
     }
 
     #[cfg(test)]
-    fn generate_test() -> LinkedList<Box<MyInt>, Links<Box<MyInt>>,
-                                     Box<Sentinel<Box<MyInt>, Links<Box<MyInt>>>>> {
+    fn generate_test() -> LinkedList<Box<MyInt>, MyInt, MyLink> {
         list_from(&[box MyInt::new(0), box MyInt::new(1), box MyInt::new(2),
                     box MyInt::new(3), box MyInt::new(4), box MyInt::new(5),
                     box MyInt::new(6)])
     }
 
     #[cfg(test)]
-    fn list_from<T>(v: &[T]) -> LinkedList<T, Links<T>, Box<Sentinel<T, Links<T>>>>
-        where T: Clone + DerefMut,
-              T::Target: Node<T, Links<T>>
+    fn list_from<T, S, L>(v: &[T]) -> LinkedList<T, S, L>
+        where T: OwningPointer<Target=S> + Clone,
+              S: Node<L>,
+              L: Linkable<Container=S>
     {
         v.iter().cloned().collect()
     }
@@ -1092,8 +1028,10 @@ mod tests {
     fn test_append() {
         // Empty to empty
         {
-            let mut m: MyIntList = LinkedList::new();
-            let mut n: MyIntList = LinkedList::new();
+            let mut m: LinkedList<Box<MyInt>, MyInt, MyLink> =
+                LinkedList::new();
+            let mut n: LinkedList<Box<MyInt>, MyInt, MyLink> =
+                LinkedList::new();
             m.append(&mut n);
             check_links(&m);
             assert_eq!(m.len(), 0);
@@ -1101,8 +1039,8 @@ mod tests {
         }
         // Non-empty to empty
         {
-            let mut m: MyIntList = LinkedList::new();
-            let mut n: MyIntList = LinkedList::new();
+            let mut m = LinkedList::new();
+            let mut n = LinkedList::new();
             n.push_back(box MyInt::new(2));
             m.append(&mut n);
             check_links(&m);
@@ -1113,8 +1051,8 @@ mod tests {
         }
         // Empty to non-empty
         {
-            let mut m: MyIntList = LinkedList::new();
-            let mut n: MyIntList = LinkedList::new();
+            let mut m = LinkedList::new();
+            let mut n = LinkedList::new();
             m.push_back(box MyInt::new(2));
             m.append(&mut n);
             check_links(&m);
@@ -1214,7 +1152,7 @@ mod tests {
         for (i, elt) in m.iter().enumerate() {
             assert_eq!(i as i32, elt.i);
         }
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
         n.push_front(box MyInt::new(4));
         let mut it = n.iter();
@@ -1226,7 +1164,7 @@ mod tests {
 
     #[test]
     fn test_iterator_clone() {
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         n.push_back(box MyInt::new(2));
         n.push_back(box MyInt::new(3));
         n.push_back(box MyInt::new(4));
@@ -1240,7 +1178,7 @@ mod tests {
 
     #[test]
     fn test_iterator_double_end() {
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
         n.push_front(box MyInt::new(4));
         n.push_front(box MyInt::new(5));
@@ -1262,7 +1200,7 @@ mod tests {
         for (i, elt) in m.iter().rev().enumerate() {
             assert_eq!((6 - i) as i32, elt.i);
         }
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert_eq!(n.iter().rev().next(), None);
         n.push_front(box MyInt::new(4));
         let mut it = n.iter().rev();
@@ -1281,7 +1219,7 @@ mod tests {
             len -= 1;
         }
         assert_eq!(len, 0);
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert!(n.iter_mut().next().is_none());
         n.push_front(box MyInt::new(4));
         n.push_back(box MyInt::new(5));
@@ -1295,7 +1233,7 @@ mod tests {
 
     #[test]
     fn test_iterator_mut_double_end() {
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert!(n.iter_mut().next_back().is_none());
         n.push_front(box MyInt::new(4));
         n.push_front(box MyInt::new(5));
@@ -1358,7 +1296,7 @@ mod tests {
         for (i, elt) in m.iter_mut().rev().enumerate() {
             assert_eq!((6 - i) as i32, elt.i);
         }
-        let mut n: MyIntList = LinkedList::new();
+        let mut n = LinkedList::new();
         assert!(n.iter_mut().rev().next().is_none());
         n.push_front(box MyInt::new(4));
         let mut it = n.iter_mut().rev();
@@ -1398,8 +1336,8 @@ mod tests {
 
     #[test]
     fn test_hash() {
-      let mut x: MyIntList = LinkedList::new();
-      let mut y: MyIntList = LinkedList::new();
+      let mut x = LinkedList::new();
+      let mut y = LinkedList::new();
 
       assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
 
@@ -1437,13 +1375,11 @@ mod tests {
 
     #[cfg(test)]
     fn fuzz_test(sz: i32) {
-        println!("Fuzz!");
-        let mut m: MyIntList = LinkedList::new();
+        let mut m = LinkedList::new();
         let mut v = vec![];
         for i in 0..sz {
             check_links(&m);
             let r: u8 = rand::random();
-            println!("{}", r % 6);
             match r % 6 {
                 0 => {
                     m.pop_back();

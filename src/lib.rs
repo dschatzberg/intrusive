@@ -18,6 +18,7 @@
 #![feature(box_syntax,core,no_std,unsafe_destructor,visible_private_types)]
 #![cfg_attr(test, feature(collections, hash, test))]
 #![cfg_attr(feature="nostd", no_std)]
+#![cfg_attr(not(feature="nostd"), feature(alloc))]
 
 #[macro_use] extern crate core;
 
