@@ -20,6 +20,7 @@ use core::cmp::Ordering;
 use core::default::Default;
 use core::fmt;
 use core::hash::{Hasher, Hash};
+use core::intrinsics::forget;
 use core::iter::{self,FromIterator,IntoIterator};
 use core::marker::PhantomData;
 use core::ops::DerefMut;
@@ -616,7 +617,6 @@ impl<'a, T, S, L> IntoIterator for &'a mut LinkedList<T, S, L>
     }
 }
 
-
 impl<T, S, L> PartialEq for LinkedList<T, S, L>
     where T: OwningPointer<Target=S>,
           S: Node<L> + PartialEq,
@@ -841,6 +841,18 @@ impl<T, S, L> Clone for IntoIter<T, S, L>
 
 // OwningPointer impls
 
+unsafe impl<'a, T> OwningPointer for &'a mut T {
+    #[inline]
+    unsafe fn from_raw(raw: *mut T) -> &'a mut T {
+        &mut *raw
+    }
+
+    #[inline]
+    unsafe fn take(self) {
+        forget(self);
+    }
+}
+
 #[cfg(any(test,not(feature="nostd")))]
 unsafe impl<T> OwningPointer for Box<T> {
     #[inline]
@@ -1006,6 +1018,13 @@ mod tests {
         }
         assert_eq!(n.pop_front(), Some(box MyInt::new(0)));
         assert_eq!(n.pop_front(), Some(box MyInt::new(1)));
+    }
+
+    #[test]
+    fn test_mut_ref() {
+        let mut m = MyInt::new(0);
+        let mut n = LinkedList::new();
+        n.push_front(&mut m);
     }
 
     #[cfg(test)]
