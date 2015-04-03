@@ -151,6 +151,7 @@ macro_rules! define_list_link {
     );
 }
 
+#[macro_export]
 macro_rules! declare_list_link {
     ($link:ident) => (
         #[derive(Clone, Default, Debug)]
@@ -162,6 +163,7 @@ macro_rules! declare_list_link {
     );
 }
 
+#[macro_export]
 macro_rules! impl_list_link {
     ($link:ident = $container:ty : $field:ident) => (
         unsafe impl $crate::linked_list::Linkable for $link {
@@ -186,6 +188,7 @@ macro_rules! impl_list_link {
     );
 }
 
+#[macro_export]
 macro_rules! impl_list_node {
     ($link:ident = $container:ty : $field:ident) => (
         unsafe impl $crate::linked_list::Node<$link> for $container {
