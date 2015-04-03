@@ -272,6 +272,42 @@ impl<T, S, L> LinkedList<T, S, L>
     /// this operation, `other` becomes empty.
     ///
     /// This operation should compute in O(1) time and O(1) memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// use std::default::Default;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// impl MyInt {
+    ///   pub fn new(i: i32) -> MyInt {
+    ///     MyInt { links: Default::default(), i: i}
+    ///   }
+    /// }
+    /// # fn main() {
+    /// let mut a = LinkedList::new();
+    /// let mut b = LinkedList::new();
+    /// a.push_back(Box::new(MyInt::new(1)));
+    /// a.push_back(Box::new(MyInt::new(2)));
+    /// b.push_back(Box::new(MyInt::new(3)));
+    /// b.push_back(Box::new(MyInt::new(4)));
+    ///
+    /// a.append(&mut b);
+    ///
+    /// for e in a.iter() {
+    ///     println!("{}", e.i); // prints 1, then 2, then 3, then 4
+    /// }
+    /// println!("{}", b.len()); // prints 0
+    /// # }
+    /// ```
     pub fn append(&mut self, other: &mut LinkedList<T, S, L>) {
         match self.head.resolve_mut() {
             None => {
