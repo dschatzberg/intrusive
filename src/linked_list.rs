@@ -376,6 +376,7 @@ impl<T, S, L> LinkedList<T, S, L>
     ///     MyInt { links: Default::default(), i: i}
     ///   }
     /// }
+    ///
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert!(dl.is_empty());
