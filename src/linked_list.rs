@@ -393,6 +393,40 @@ impl<T, S, L> LinkedList<T, S, L>
     /// Returns the length of the `LinkedList`.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// use std::default::Default;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// impl MyInt {
+    ///   pub fn new(i: i32) -> MyInt {
+    ///     MyInt { links: Default::default(), i: i}
+    ///   }
+    /// }
+    ///
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    ///
+    /// dl.push_front(Box::new(MyInt::new(2)));
+    /// assert_eq!(dl.len(), 1);
+    ///
+    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.len(), 2);
+    ///
+    /// dl.push_back(Box::new(MyInt::new(3)));
+    /// assert_eq!(dl.len(), 3);
+    /// # }
+    /// ```
     #[inline]
     pub fn len(&self) -> usize {
         self.length
