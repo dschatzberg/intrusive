@@ -260,6 +260,7 @@ impl<T, S, L> LinkedList<T, S, L>
           S: Node<L>,
           L: Linkable<Container=T::Target>
 {
+    /// Creates an empty `LinkedList`
     #[inline]
     pub fn new() -> LinkedList<T, S, L> {
         LinkedList { length: 0, head: Rawlink::none(),
@@ -277,7 +278,7 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// use std::default::Default;
+    /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
     /// struct MyInt {
@@ -287,12 +288,11 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// define_list_link!(MyLink = MyInt : links);
     ///
-    /// impl MyInt {
-    ///   pub fn new(i: i32) -> MyInt {
-    ///     MyInt { links: Default::default(), i: i}
-    ///   }
-    /// }
-    ///
+    /// # impl MyInt {
+    /// #   pub fn new(i: i32) -> MyInt {
+    /// #     MyInt { links: Default::default(), i: i}
+    /// #   }
+    /// # }
     /// # fn main() {
     /// let mut a = LinkedList::new();
     /// let mut b = LinkedList::new();
@@ -361,7 +361,7 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// use std::default::Default;
+    /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
     /// struct MyInt {
@@ -371,12 +371,11 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// define_list_link!(MyLink = MyInt : links);
     ///
-    /// impl MyInt {
-    ///   pub fn new(i: i32) -> MyInt {
-    ///     MyInt { links: Default::default(), i: i}
-    ///   }
-    /// }
-    ///
+    /// # impl MyInt {
+    /// #   pub fn new(i: i32) -> MyInt {
+    /// #     MyInt { links: Default::default(), i: i}
+    /// #   }
+    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert!(dl.is_empty());
@@ -398,7 +397,7 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// use std::default::Default;
+    /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
     /// struct MyInt {
@@ -408,12 +407,11 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// define_list_link!(MyLink = MyInt : links);
     ///
-    /// impl MyInt {
-    ///   pub fn new(i: i32) -> MyInt {
-    ///     MyInt { links: Default::default(), i: i}
-    ///   }
-    /// }
-    ///
+    /// # impl MyInt {
+    /// #   pub fn new(i: i32) -> MyInt {
+    /// #     MyInt { links: Default::default(), i: i}
+    /// #   }
+    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     ///
@@ -432,6 +430,78 @@ impl<T, S, L> LinkedList<T, S, L>
         self.length
     }
 
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    ///
+    /// dl.push_front(Box::new(MyInt::new(2)));
+    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.len(), 2);
+    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    ///
+    /// dl.clear();
+    /// assert_eq!(dl.len(), 0);
+    /// assert_eq!(dl.front(), None);
+    /// # }
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
         *self = LinkedList::new()
@@ -439,6 +509,72 @@ impl<T, S, L> LinkedList<T, S, L>
 
     /// Provides a reference to the front element, or `None` if the list is
     /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    /// assert_eq!(dl.front(), None);
+    ///
+    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    /// # }
     #[inline]
     pub fn front(&self) -> Option<&T::Target> {
         self.head.resolve().map(|head| unsafe {head.container_of()})
@@ -446,13 +582,153 @@ impl<T, S, L> LinkedList<T, S, L>
 
     /// Provides a mutable reference to the front element, or `None` if the list
     /// is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    /// assert_eq!(dl.front(), None);
+    ///
+    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    ///
+    /// match unsafe{dl.front_mut()} {
+    ///     None => {},
+    ///     Some(x) => x.i = 5,
+    /// }
+    /// assert_eq!(dl.front(), Some(&MyInt::new(5)));
+    /// # }
+    /// ```
     #[inline]
-    pub fn front_mut(&mut self) -> Option<&mut T::Target> {
-        self.head.resolve_mut().map(|head| unsafe {head.container_of_mut()})
+    pub unsafe fn front_mut(&mut self) -> Option<&mut T::Target> {
+        self.head.resolve_mut().map(|head| head.container_of_mut())
     }
 
     /// Provides a reference to the back element, or `None` if the list is
     /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    /// assert_eq!(dl.back(), None);
+    ///
+    /// dl.push_back(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.back(), Some(&MyInt::new(1)));
+    /// # }
+    /// ```
     #[inline]
     pub fn back(&self) -> Option<&T::Target> {
         self.head.resolve().map(|head| {
@@ -462,13 +738,84 @@ impl<T, S, L> LinkedList<T, S, L>
 
     /// Provides a mutable reference to the back element, or `None` if the list
     /// is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    /// assert_eq!(dl.back(), None);
+    ///
+    /// dl.push_back(Box::new(MyInt::new(1)));
+    /// assert_eq!(dl.back(), Some(&MyInt::new(1)));
+    ///
+    /// match unsafe {dl.back_mut()} {
+    ///     None => {},
+    ///     Some(x) => x.i = 5,
+    /// }
+    /// assert_eq!(dl.back(), Some(&MyInt::new(5)));
+    /// # }
+    /// ```
     #[inline]
-    pub fn back_mut(&mut self) -> Option<&mut T::Target> {
+    pub unsafe fn back_mut(&mut self) -> Option<&mut T::Target> {
         // if pprev is not none, then it points to the link before the tail
         self.head.resolve_mut().map(|head| {
-            unsafe {
-                head.get_prev_mut().resolve_mut().unwrap().container_of_mut()
-            }
+            head.get_prev_mut().resolve_mut().unwrap().container_of_mut()
         })
     }
 
@@ -497,6 +844,76 @@ impl<T, S, L> LinkedList<T, S, L>
     /// Adds an element first in the list.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut d = LinkedList::new();
+    /// assert_eq!(d.pop_front(), None);
+    ///
+    /// d.push_front(Box::new(MyInt::new(1)));
+    /// d.push_front(Box::new(MyInt::new(3)));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(3))));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// assert_eq!(d.pop_front(), None);
+    /// # }
+    /// ```
     pub fn push_front(&mut self, mut elt: T) {
         // ensure links are not already being used
         elt.get_links().check_links();
@@ -518,6 +935,76 @@ impl<T, S, L> LinkedList<T, S, L>
     /// empty.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut d = LinkedList::new();
+    /// assert_eq!(d.pop_front(), None);
+    ///
+    /// d.push_front(Box::new(MyInt::new(1)));
+    /// d.push_front(Box::new(MyInt::new(3)));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(3))));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// assert_eq!(d.pop_front(), None);
+    /// # }
+    /// ```
     pub fn pop_front(&mut self) -> Option<T> {
         self.head.take().resolve_mut().map(|mut head| {
             if self.length == 1 {
@@ -535,6 +1022,72 @@ impl<T, S, L> LinkedList<T, S, L>
     /// Appends an element to the back of a list
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut d = LinkedList::new();
+    /// d.push_back(Box::new(MyInt::new(1)));
+    /// d.push_back(Box::new(MyInt::new(3)));
+    /// assert_eq!(3, unsafe{d.back()}.unwrap().i);
+    /// # }
+    /// ```
     pub fn push_back(&mut self, mut elt: T) {
         if self.is_empty() {
             return self.push_front(elt);
@@ -553,6 +1106,73 @@ impl<T, S, L> LinkedList<T, S, L>
     /// it is empty.
     ///
     /// This operation should compute in O(1) time
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut d = LinkedList::new();
+    /// assert_eq!(d.pop_back(), None);
+    /// d.push_back(Box::new(MyInt::new(1)));
+    /// d.push_back(Box::new(MyInt::new(3)));
+    /// assert_eq!(d.pop_back(), Some(Box::new(MyInt::new(3))));
+    /// # }
+    /// ```
     pub fn pop_back(&mut self) -> Option<T> {
         if self.len() <= 1 { return self.pop_front(); }
 
@@ -570,6 +1190,78 @@ impl<T, S, L> LinkedList<T, S, L>
     /// Panics if `at > len`.
     ///
     /// This operation should compute in O(n) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// # use std::cmp::Ordering;
+    /// # use std::default::Default;
+    /// # use std::hash::{self, Hash, Hasher, SipHasher};
+    /// # use std::fmt;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// # impl Clone for MyInt {
+    /// #     fn clone(&self) -> MyInt {
+    /// #         MyInt::new(self.i)
+    /// #     }
+    /// # }
+    /// # impl fmt::Debug for MyInt {
+    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// #         write!(f, "MyInt({:?})", self.i)
+    /// #     }
+    /// # }
+    /// # impl Hash for MyInt {
+    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
+    /// #         self.i.hash(state);
+    /// #     }
+    /// # }
+    /// # impl PartialEq for MyInt {
+    /// #     fn eq(&self, other: &MyInt) -> bool {
+    /// #         self.i == other.i
+    /// #     }
+    /// # }
+    /// # impl PartialEq<i32> for MyInt {
+    /// #     fn eq(&self, other: &i32) -> bool {
+    /// #         self.i == *other
+    /// #     }
+    /// # }
+    /// # impl Eq for MyInt {}
+    /// # impl PartialOrd for MyInt {
+    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
+    /// #         self.i.partial_cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl Ord for MyInt {
+    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
+    /// #         self.i.cmp(&other.i)
+    /// #     }
+    /// # }
+    /// # impl MyInt {
+    /// #     pub fn new(i: i32) -> MyInt {
+    /// #         MyInt { links: Default::default(), i: i}
+    /// #     }
+    /// # }
+    /// # fn main() {
+    /// let mut d = LinkedList::new();
+    ///
+    /// d.push_front(Box::new(MyInt::new(1)));
+    /// d.push_front(Box::new(MyInt::new(2)));
+    /// d.push_front(Box::new(MyInt::new(3)));
+    ///
+    /// let mut splitted = d.split_off(2);
+    ///
+    /// assert_eq!(splitted.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// assert_eq!(splitted.pop_front(), None);
+    /// # }
+    /// ```
     pub fn split_off(&mut self, at: usize) -> LinkedList<T, S, L> {
         let len = self.len();
         assert!(at <= len, "Cannot split off at a nonexistent index");
@@ -1181,13 +1873,13 @@ mod tests {
         n.push_front(box MyInt::new(3));
         {
             assert_eq!(n.front().unwrap().i, 3);
-            let x = n.front_mut().unwrap();
+            let x = unsafe {n.front_mut()}.unwrap();
             assert_eq!(x.i, 3);
             x.i = 0;
         }
         {
             assert_eq!(n.back().unwrap().i, 2);
-            let y = n.back_mut().unwrap();
+            let y = unsafe{n.back_mut()}.unwrap();
             assert_eq!(y.i, 2);
             y.i = 1;
         }
