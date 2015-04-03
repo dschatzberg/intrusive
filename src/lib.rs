@@ -15,12 +15,13 @@
 
 #![crate_name = "intrusive_containers"]
 #![crate_type = "rlib"]
-#![feature(core,no_std)]
-#![cfg_attr(test, feature(collections, hash, test))]
+#![feature(core)]
+#![cfg_attr(all(feature="nostd",not(test)), feature(no_std))]
 #![cfg_attr(all(feature="nostd",not(test)), no_std)]
 #![cfg_attr(any(not(feature="nostd"),test), feature(alloc))]
+#![cfg_attr(test, feature(collections, hash, test))]
 
-#[macro_use] extern crate core;
+#[cfg(all(feature="nostd",not(test)))] #[macro_use] extern crate core;
 
 #[cfg(test)] extern crate test;
 #[cfg(test)] extern crate rand;

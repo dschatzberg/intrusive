@@ -22,10 +22,20 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+#[cfg(all(feature="nostd",not(test)))]
 use core::prelude::*;
+#[cfg(all(feature="nostd",not(test)))]
 use core::default::Default;
+#[cfg(any(test,not(feature="nostd")))]
+use std::default::Default;
+#[cfg(all(feature="nostd",not(test)))]
 use core::mem;
+#[cfg(any(test,not(feature="nostd")))]
+use std::mem;
+#[cfg(all(feature="nostd",not(test)))]
 use core::ptr;
+#[cfg(any(test,not(feature="nostd")))]
+use std::ptr;
 
 #[allow(raw_pointer_derive)]
 #[derive(Debug)]
