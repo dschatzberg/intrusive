@@ -15,7 +15,7 @@
 
 #![crate_name = "intrusive_containers"]
 #![crate_type = "rlib"]
-#![feature(core,no_std,visible_private_types)]
+#![feature(core,no_std)]
 #![cfg_attr(test, feature(collections, hash, test))]
 #![cfg_attr(all(feature="nostd",not(test)), no_std)]
 #![cfg_attr(any(not(feature="nostd"),test), feature(alloc))]
