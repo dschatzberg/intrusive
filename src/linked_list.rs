@@ -292,6 +292,7 @@ impl<T, S, L> LinkedList<T, S, L>
     ///     MyInt { links: Default::default(), i: i}
     ///   }
     /// }
+    ///
     /// # fn main() {
     /// let mut a = LinkedList::new();
     /// let mut b = LinkedList::new();
@@ -355,6 +356,34 @@ impl<T, S, L> LinkedList<T, S, L>
     /// Returns `true` if the `LinkedList` is empty
     ///
     /// This operation should compute in O(1) time
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate intrusive_containers;
+    /// use std::default::Default;
+    /// use intrusive_containers::LinkedList;
+    ///
+    /// struct MyInt {
+    ///     links: MyLink,
+    ///     i: i32,
+    /// }
+    ///
+    /// define_list_link!(MyLink = MyInt : links);
+    ///
+    /// impl MyInt {
+    ///   pub fn new(i: i32) -> MyInt {
+    ///     MyInt { links: Default::default(), i: i}
+    ///   }
+    /// }
+    /// # fn main() {
+    /// let mut dl = LinkedList::new();
+    /// assert!(dl.is_empty());
+    ///
+    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// assert!(!dl.is_empty());
+    /// # }
+    /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.length == 0
