@@ -17,17 +17,13 @@
 #![crate_type = "rlib"]
 #![feature(box_syntax,core,no_std,unsafe_destructor,visible_private_types)]
 #![cfg_attr(test, feature(collections, hash, test))]
-#![cfg_attr(feature="nostd", no_std)]
-#![cfg_attr(not(feature="nostd"), feature(alloc))]
+#![cfg_attr(all(feature="nostd",not(test)), no_std)]
+#![cfg_attr(any(not(feature="nostd"),test), feature(alloc))]
 
 #[macro_use] extern crate core;
 
 #[cfg(test)] extern crate test;
 #[cfg(test)] extern crate rand;
-
-#[cfg(test)]
-#[cfg(feature="nostd")]
-#[macro_use] extern crate std;
 
 pub use linked_list::LinkedList;
 

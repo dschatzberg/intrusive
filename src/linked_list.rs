@@ -27,7 +27,7 @@ use core::mem;
 use core::ops::DerefMut;
 use core::prelude::*;
 use super::rawlink::Rawlink;
-#[cfg(not(feature="nostd"))]
+#[cfg(any(test,not(feature="nostd")))]
 use std::boxed;
 
 ///////////////////////
