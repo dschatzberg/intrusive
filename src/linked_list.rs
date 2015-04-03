@@ -1852,25 +1852,25 @@ mod tests {
         assert_eq!(m.pop_front(), None);
         assert_eq!(m.pop_back(), None);
         assert_eq!(m.pop_front(), None);
-        m.push_front(box MyInt::new(1));
-        assert_eq!(m.pop_front(), Some(box MyInt::new(1)));
-        m.push_back(box MyInt::new(2));
-        m.push_back(box MyInt::new(3));
+        m.push_front(Box::new(MyInt::new(1)));
+        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(1))));
+        m.push_back(Box::new(MyInt::new(2)));
+        m.push_back(Box::new(MyInt::new(3)));
         assert_eq!(m.len(), 2);
-        assert_eq!(m.pop_front(), Some(box MyInt::new(2)));
-        assert_eq!(m.pop_front(), Some(box MyInt::new(3)));
+        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(2))));
+        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(3))));
         assert_eq!(m.len(), 0);
         assert_eq!(m.pop_front(), None);
-        m.push_back(box MyInt::new(1));
-        m.push_back(box MyInt::new(3));
-        m.push_back(box MyInt::new(5));
-        m.push_back(box MyInt::new(7));
-        assert_eq!(m.pop_front(), Some(box MyInt::new(1)));
+        m.push_back(Box::new(MyInt::new(1)));
+        m.push_back(Box::new(MyInt::new(3)));
+        m.push_back(Box::new(MyInt::new(5)));
+        m.push_back(Box::new(MyInt::new(7)));
+        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(1))));
 
 
         let mut n = LinkedList::new();
-        n.push_front(box MyInt::new(2));
-        n.push_front(box MyInt::new(3));
+        n.push_front(Box::new(MyInt::new(2)));
+        n.push_front(Box::new(MyInt::new(3)));
         {
             assert_eq!(n.front().unwrap().i, 3);
             let x = unsafe {n.front_mut()}.unwrap();
@@ -1883,8 +1883,8 @@ mod tests {
             assert_eq!(y.i, 2);
             y.i = 1;
         }
-        assert_eq!(n.pop_front(), Some(box MyInt::new(0)));
-        assert_eq!(n.pop_front(), Some(box MyInt::new(1)));
+        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(0))));
+        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(1))));
     }
 
     #[test]
@@ -1896,9 +1896,10 @@ mod tests {
 
     #[cfg(test)]
     fn generate_test() -> LinkedList<Box<MyInt>, MyInt, MyLink> {
-        list_from(&[box MyInt::new(0), box MyInt::new(1), box MyInt::new(2),
-                    box MyInt::new(3), box MyInt::new(4), box MyInt::new(5),
-                    box MyInt::new(6)])
+        list_from(&[Box::new(MyInt::new(0)), Box::new(MyInt::new(1)),
+                    Box::new(MyInt::new(2)), Box::new(MyInt::new(3)),
+                    Box::new(MyInt::new(4)), Box::new(MyInt::new(5)),
+                    Box::new(MyInt::new(6))])
     }
 
     #[cfg(test)]
@@ -1927,11 +1928,11 @@ mod tests {
         {
             let mut m = LinkedList::new();
             let mut n = LinkedList::new();
-            n.push_back(box MyInt::new(2));
+            n.push_back(Box::new(MyInt::new(2)));
             m.append(&mut n);
             check_links(&m);
             assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(box MyInt::new(2)));
+            assert_eq!(m.pop_back(), Some(Box::new(MyInt::new(2))));
             assert_eq!(n.len(), 0);
             check_links(&m);
         }
@@ -1939,20 +1940,22 @@ mod tests {
         {
             let mut m = LinkedList::new();
             let mut n = LinkedList::new();
-            m.push_back(box MyInt::new(2));
+            m.push_back(Box::new(MyInt::new(2)));
             m.append(&mut n);
             check_links(&m);
             assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(box MyInt::new(2)));
+            assert_eq!(m.pop_back(), Some(Box::new(MyInt::new(2))));
             check_links(&m);
         }
 
         // Non-empty to non-empty
-        let v = vec![box MyInt::new(1), box MyInt::new(2), box MyInt::new(3),
-                     box MyInt::new(4), box MyInt::new(5)];
-        let u = vec![box MyInt::new(9), box MyInt::new(8), box MyInt::new(1),
-                     box MyInt::new(2), box MyInt::new(3), box MyInt::new(4),
-                     box MyInt::new(5)];
+        let v = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
+                     Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
+                     Box::new(MyInt::new(5))];
+        let u = vec![Box::new(MyInt::new(9)), Box::new(MyInt::new(8)),
+                     Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
+                     Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
+                     Box::new(MyInt::new(5))];
         let mut m = list_from(&v);
         let mut n = list_from(&u);
         m.append(&mut n);
@@ -1966,9 +1969,9 @@ mod tests {
         assert_eq!(n.len(), 0);
         // let's make sure it's working properly, since we
         // did some direct changes to private members
-        n.push_back(box MyInt::new(3));
+        n.push_back(Box::new(MyInt::new(3)));
         assert_eq!(n.len(), 1);
-        assert_eq!(n.pop_front(), Some(box MyInt::new(3)));
+        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(3))));
         check_links(&n);
     }
 
@@ -1977,7 +1980,7 @@ mod tests {
         // singleton
         {
             let mut m = LinkedList::new();
-            m.push_back(box MyInt::new(1));
+            m.push_back(Box::new(MyInt::new(1)));
 
             let p = m.split_off(0);
             assert_eq!(m.len(), 0);
@@ -1988,41 +1991,41 @@ mod tests {
 
         // not singleton, forwards
         {
-            let u = vec![box MyInt::new(1), box MyInt::new(2),
-                         box MyInt::new(3), box MyInt::new(4),
-                         box MyInt::new(5)];
+            let u = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
+                         Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
+                         Box::new(MyInt::new(5))];
             let mut m = list_from(&u);
             let mut n = m.split_off(2);
             assert_eq!(m.len(), 2);
             assert_eq!(n.len(), 3);
             for elt in 1..3 {
-                assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
+                assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(elt))));
             }
             for elt in 3..6 {
-                assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
+                assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(elt))));
             }
         }
         // not singleton, backwards
         {
-            let u = vec![box MyInt::new(1), box MyInt::new(2),
-                         box MyInt::new(3), box MyInt::new(4),
-                         box MyInt::new(5)];
+            let u = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
+                         Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
+                         Box::new(MyInt::new(5))];
             let mut m = list_from(&u);
             let mut n = m.split_off(4);
             assert_eq!(m.len(), 4);
             assert_eq!(n.len(), 1);
             for elt in 1..5 {
-                assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
+                assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(elt))));
             }
             for elt in 5..6 {
-                assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
+                assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(elt))));
             }
         }
 
         // no-op on the last index
         {
             let mut m = LinkedList::new();
-            m.push_back(box MyInt::new(1));
+            m.push_back(Box::new(MyInt::new(1)));
 
             let p = m.split_off(1);
             assert_eq!(m.len(), 1);
@@ -2040,7 +2043,7 @@ mod tests {
         }
         let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
-        n.push_front(box MyInt::new(4));
+        n.push_front(Box::new(MyInt::new(4)));
         let mut it = n.iter();
         assert_eq!(it.size_hint(), (1, Some(1)));
         assert_eq!(it.next().unwrap().i, 4);
@@ -2051,9 +2054,9 @@ mod tests {
     #[test]
     fn test_iterator_clone() {
         let mut n = LinkedList::new();
-        n.push_back(box MyInt::new(2));
-        n.push_back(box MyInt::new(3));
-        n.push_back(box MyInt::new(4));
+        n.push_back(Box::new(MyInt::new(2)));
+        n.push_back(Box::new(MyInt::new(3)));
+        n.push_back(Box::new(MyInt::new(4)));
         let mut it = n.iter();
         it.next();
         let mut jt = it.clone();
@@ -2066,9 +2069,9 @@ mod tests {
     fn test_iterator_double_end() {
         let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
-        n.push_front(box MyInt::new(4));
-        n.push_front(box MyInt::new(5));
-        n.push_front(box MyInt::new(6));
+        n.push_front(Box::new(MyInt::new(4)));
+        n.push_front(Box::new(MyInt::new(5)));
+        n.push_front(Box::new(MyInt::new(6)));
         let mut it = n.iter();
         assert_eq!(it.size_hint(), (3, Some(3)));
         assert_eq!(it.next().unwrap().i, 6);
@@ -2088,7 +2091,7 @@ mod tests {
         }
         let mut n = LinkedList::new();
         assert_eq!(n.iter().rev().next(), None);
-        n.push_front(box MyInt::new(4));
+        n.push_front(Box::new(MyInt::new(4)));
         let mut it = n.iter().rev();
         assert_eq!(it.size_hint(), (1, Some(1)));
         assert_eq!(it.next().unwrap().i, 4);
@@ -2107,8 +2110,8 @@ mod tests {
         assert_eq!(len, 0);
         let mut n = LinkedList::new();
         assert!(unsafe{n.iter_mut()}.next().is_none());
-        n.push_front(box MyInt::new(4));
-        n.push_back(box MyInt::new(5));
+        n.push_front(Box::new(MyInt::new(4)));
+        n.push_back(Box::new(MyInt::new(5)));
         let mut it = unsafe { n.iter_mut() };
         assert_eq!(it.size_hint(), (2, Some(2)));
         assert!(it.next().is_some());
@@ -2121,9 +2124,9 @@ mod tests {
     fn test_iterator_mut_double_end() {
         let mut n = LinkedList::new();
         assert!(unsafe{n.iter_mut()}.next_back().is_none());
-        n.push_front(box MyInt::new(4));
-        n.push_front(box MyInt::new(5));
-        n.push_front(box MyInt::new(6));
+        n.push_front(Box::new(MyInt::new(4)));
+        n.push_front(Box::new(MyInt::new(5)));
+        n.push_front(Box::new(MyInt::new(6)));
         let mut it = unsafe{n.iter_mut()};
         assert_eq!(it.size_hint(), (3, Some(3)));
         assert_eq!(it.next().unwrap().i, 6);
@@ -2137,18 +2140,20 @@ mod tests {
 
     #[test]
     fn test_insert_next() {
-        let mut m = list_from(&[box MyInt::new(0), box MyInt::new(2),
-                                box MyInt::new(4),box MyInt::new(6),
-                                box MyInt::new(8)]);
+        let mut m = list_from(&[Box::new(MyInt::new(0)),
+                                Box::new(MyInt::new(2)),
+                                Box::new(MyInt::new(4)),
+                                Box::new(MyInt::new(6)),
+                                Box::new(MyInt::new(8))]);
         let len = m.len();
         {
             let mut it = unsafe {m.iter_mut()};
-            it.insert_next(box MyInt::new(-2));
+            it.insert_next(Box::new(MyInt::new(-2)));
             loop {
                 match it.next() {
                     None => break,
                     Some(elt) => {
-                        it.insert_next(box MyInt::new(elt.i + 1));
+                        it.insert_next(Box::new(MyInt::new(elt.i + 1)));
                         match it.peek_next() {
                             Some(x) => assert_eq!(x.i, elt.i + 2),
                             None => assert_eq!(8, elt.i),
@@ -2156,24 +2161,25 @@ mod tests {
                     }
                 }
             }
-            it.insert_next(box MyInt::new(0));
-            it.insert_next(box MyInt::new(1));
+            it.insert_next(Box::new(MyInt::new(0)));
+            it.insert_next(Box::new(MyInt::new(1)));
         }
         check_links(&m);
         assert_eq!(m.len(), 3 + len * 2);
-        assert_eq!(m.into_iter().collect::<Vec<_>>(), [box MyInt::new(-2),
-                                                       box MyInt::new(0),
-                                                       box MyInt::new(1),
-                                                       box MyInt::new(2),
-                                                       box MyInt::new(3),
-                                                       box MyInt::new(4),
-                                                       box MyInt::new(5),
-                                                       box MyInt::new(6),
-                                                       box MyInt::new(7),
-                                                       box MyInt::new(8),
-                                                       box MyInt::new(9),
-                                                       box MyInt::new(0),
-                                                       box MyInt::new(1)]);
+        assert_eq!(m.into_iter().collect::<Vec<_>>(),
+                   [Box::new(MyInt::new(-2)),
+                    Box::new(MyInt::new(0)),
+                    Box::new(MyInt::new(1)),
+                    Box::new(MyInt::new(2)),
+                    Box::new(MyInt::new(3)),
+                    Box::new(MyInt::new(4)),
+                    Box::new(MyInt::new(5)),
+                    Box::new(MyInt::new(6)),
+                    Box::new(MyInt::new(7)),
+                    Box::new(MyInt::new(8)),
+                    Box::new(MyInt::new(9)),
+                    Box::new(MyInt::new(0)),
+                    Box::new(MyInt::new(1))]);
     }
 
     #[test]
@@ -2184,7 +2190,7 @@ mod tests {
         }
         let mut n = LinkedList::new();
         assert!(unsafe{n.iter_mut()}.rev().next().is_none());
-        n.push_front(box MyInt::new(4));
+        n.push_front(Box::new(MyInt::new(4)));
         let mut it = unsafe{n.iter_mut()}.rev();
         assert!(it.next().is_some());
         assert!(it.next().is_none());
@@ -2192,12 +2198,12 @@ mod tests {
 
     #[test]
     fn test_send() {
-        let n = list_from(&[box MyInt::new(1), box MyInt::new(2),
-                            box MyInt::new(3)]);
+        let n = list_from(&[Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
+                            Box::new(MyInt::new(3))]);
         thread::spawn(move || {
             check_links(&n);
-            let a = list_from(&[box MyInt::new(1),box MyInt::new(2),
-                                box MyInt::new(3)]);
+            let a = list_from(&[Box::new(MyInt::new(1)),Box::new(MyInt::new(2)),
+                                Box::new(MyInt::new(3))]);
             assert_eq!(a, n);
         }).join().ok().unwrap();
     }
@@ -2207,16 +2213,16 @@ mod tests {
         let mut n = list_from(&[]);
         let mut m = list_from(&[]);
         assert!(n == m);
-        n.push_front(box MyInt::new(1));
+        n.push_front(Box::new(MyInt::new(1)));
         assert!(n != m);
-        m.push_back(box MyInt::new(1));
+        m.push_back(Box::new(MyInt::new(1)));
         assert!(n == m);
 
-        let n = list_from(&[box MyInt::new(2), box MyInt::new(3),
-                            box MyInt::new(4)]);
-        let m = list_from(&[box MyInt::new(1),
-                            box MyInt::new(2),
-                            box MyInt::new(3)]);
+        let n = list_from(&[Box::new(MyInt::new(2)), Box::new(MyInt::new(3)),
+                            Box::new(MyInt::new(4))]);
+        let m = list_from(&[Box::new(MyInt::new(1)),
+                            Box::new(MyInt::new(2)),
+                            Box::new(MyInt::new(3))]);
         assert!(n != m);
     }
 
@@ -2227,13 +2233,13 @@ mod tests {
 
       assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
 
-      x.push_back(box MyInt::new(1));
-      x.push_back(box MyInt::new(2));
-      x.push_back(box MyInt::new(3));
+      x.push_back(Box::new(MyInt::new(1)));
+      x.push_back(Box::new(MyInt::new(2)));
+      x.push_back(Box::new(MyInt::new(3)));
 
-      y.push_front(box MyInt::new(3));
-      y.push_front(box MyInt::new(2));
-      y.push_front(box MyInt::new(1));
+      y.push_front(Box::new(MyInt::new(3)));
+      y.push_front(Box::new(MyInt::new(2)));
+      y.push_front(Box::new(MyInt::new(1)));
 
       assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
     }
@@ -2241,9 +2247,9 @@ mod tests {
     #[test]
     fn test_ord() {
         let n = list_from(&[]);
-        let m = list_from(&[box MyInt::new(1),
-                            box MyInt::new(2),
-                            box MyInt::new(3)]);
+        let m = list_from(&[Box::new(MyInt::new(1)),
+                            Box::new(MyInt::new(2)),
+                            Box::new(MyInt::new(3))]);
         assert!(n < m);
         assert!(m > n);
         assert!(n <= n);
@@ -2278,12 +2284,12 @@ mod tests {
                     }
                 }
                 2 | 4 =>  {
-                    m.push_front(box MyInt::new(-i));
-                    v.insert(0, box MyInt::new(-i));
+                    m.push_front(Box::new(MyInt::new(-i)));
+                    v.insert(0, Box::new(MyInt::new(-i)));
                 }
                 3 | 5 | _ => {
-                    m.push_back(box MyInt::new(i));
-                    v.push(box MyInt::new(i));
+                    m.push_back(Box::new(MyInt::new(i)));
+                    v.push(Box::new(MyInt::new(i)));
                 }
             }
         }
