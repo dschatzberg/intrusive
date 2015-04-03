@@ -460,8 +460,11 @@ impl<'a, T, S, L> LinkedList<T, S, L>
           L: Linkable<Container=T::Target> + 'a
 {
     /// Provides a forward iterator with mutable references
+    ///
+    /// This operation is marked unsafe because it would be possible to use
+    /// `mem::replace` which would invalidate the links
     #[inline]
-    pub fn iter_mut(&'a mut self) -> IterMut<'a, T, S, L> {
+    pub unsafe fn iter_mut(&'a mut self) -> IterMut<'a, T, S, L> {
         let tail = if self.length == 0 {
             Rawlink::none()
         } else {
@@ -645,18 +648,18 @@ impl<'a, T, S, L> IntoIterator for &'a LinkedList<T, S, L>
     }
 }
 
-impl<'a, T, S, L> IntoIterator for &'a mut LinkedList<T, S, L>
-    where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
-          L: Linkable<Container=T::Target> + 'a
-{
-    type Item = &'a mut S;
-    type IntoIter = IterMut<'a, T, S, L>;
+// impl<'a, T, S, L> IntoIterator for &'a mut LinkedList<T, S, L>
+//     where T: OwningPointer<Target=S> + 'a,
+//           S: Node<L> + 'a,
+//           L: Linkable<Container=T::Target> + 'a
+// {
+//     type Item = &'a mut S;
+//     type IntoIter = IterMut<'a, T, S, L>;
 
-    fn into_iter(self) -> IterMut<'a, T, S, L> {
-        self.iter_mut()
-    }
-}
+//     fn into_iter(self) -> IterMut<'a, T, S, L> {
+//         self.iter_mut()
+//     }
+// }
 
 impl<T, S, L> PartialEq for LinkedList<T, S, L>
     where T: OwningPointer<Target=S>,
@@ -1284,16 +1287,16 @@ mod tests {
     fn test_mut_iter() {
         let mut m = generate_test();
         let mut len = m.len();
-        for (i, elt) in m.iter_mut().enumerate() {
+        for (i, elt) in unsafe {m.iter_mut()}.enumerate() {
             assert_eq!(i as i32, elt.i);
             len -= 1;
         }
         assert_eq!(len, 0);
         let mut n = LinkedList::new();
-        assert!(n.iter_mut().next().is_none());
+        assert!(unsafe{n.iter_mut()}.next().is_none());
         n.push_front(box MyInt::new(4));
         n.push_back(box MyInt::new(5));
-        let mut it = n.iter_mut();
+        let mut it = unsafe { n.iter_mut() };
         assert_eq!(it.size_hint(), (2, Some(2)));
         assert!(it.next().is_some());
         assert!(it.next().is_some());
@@ -1304,11 +1307,11 @@ mod tests {
     #[test]
     fn test_iterator_mut_double_end() {
         let mut n = LinkedList::new();
-        assert!(n.iter_mut().next_back().is_none());
+        assert!(unsafe{n.iter_mut()}.next_back().is_none());
         n.push_front(box MyInt::new(4));
         n.push_front(box MyInt::new(5));
         n.push_front(box MyInt::new(6));
-        let mut it = n.iter_mut();
+        let mut it = unsafe{n.iter_mut()};
         assert_eq!(it.size_hint(), (3, Some(3)));
         assert_eq!(it.next().unwrap().i, 6);
         assert_eq!(it.size_hint(), (2, Some(2)));
@@ -1326,7 +1329,7 @@ mod tests {
                                 box MyInt::new(8)]);
         let len = m.len();
         {
-            let mut it = m.iter_mut();
+            let mut it = unsafe {m.iter_mut()};
             it.insert_next(box MyInt::new(-2));
             loop {
                 match it.next() {
@@ -1363,13 +1366,13 @@ mod tests {
     #[test]
     fn test_mut_rev_iter() {
         let mut m = generate_test();
-        for (i, elt) in m.iter_mut().rev().enumerate() {
+        for (i, elt) in unsafe{m.iter_mut()}.rev().enumerate() {
             assert_eq!((6 - i) as i32, elt.i);
         }
         let mut n = LinkedList::new();
-        assert!(n.iter_mut().rev().next().is_none());
+        assert!(unsafe{n.iter_mut()}.rev().next().is_none());
         n.push_front(box MyInt::new(4));
-        let mut it = n.iter_mut().rev();
+        let mut it = unsafe{n.iter_mut()}.rev();
         assert!(it.next().is_some());
         assert!(it.next().is_none());
     }
