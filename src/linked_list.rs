@@ -432,6 +432,11 @@ impl<T, S, L> LinkedList<T, S, L>
         self.length
     }
 
+    #[inline]
+    pub fn clear(&mut self) {
+        *self = LinkedList::new()
+    }
+
     /// Provides a reference to the front element, or `None` if the list is
     /// empty.
     #[inline]
