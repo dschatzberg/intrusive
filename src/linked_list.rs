@@ -23,6 +23,7 @@ use core::hash::{Hasher, Hash};
 use core::intrinsics::forget;
 use core::iter::{self,FromIterator,IntoIterator};
 use core::marker::PhantomData;
+use core::mem;
 use core::ops::DerefMut;
 use core::prelude::*;
 use super::rawlink::Rawlink;
@@ -452,6 +453,63 @@ impl<T, S, L> LinkedList<T, S, L>
         self.delete(tail);
         Some(unsafe {T::from_raw(tail.container_of_mut() as *mut _)})
     }
+
+    /// Splits the list into two at the given index. Returns everything after the given index,
+    /// including the index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `at > len`.
+    ///
+    /// This operation should compute in O(n) time.
+    pub fn split_off(&mut self, at: usize) -> LinkedList<T, S, L> {
+        let len = self.len();
+        assert!(at <= len, "Cannot split off at a nonexistent index");
+        if at == 0 {
+            return mem::replace(self, LinkedList::new());
+        } else if at == len {
+            return LinkedList::new();
+        }
+
+        // Below, we iterate towards the `i-1`th node, either from the start or the end,
+        // depending on which would be faster.
+        let mut split_node = if at - 1 <= len - 1 - (at - 1) {
+            let mut iter = unsafe { self.iter_mut() };
+            // instead of skipping using .skip() (which creates a new struct),
+            // we skip manually so we can access the head field without
+            // depending on implementation details of Skip
+            for _ in 0..at - 1 {
+                iter.next();
+            }
+            iter.head
+        } else {
+            // better off starting from the end
+            let mut iter = unsafe { self.iter_mut() };
+            for _ in 0..len - 1 - (at - 1) {
+                iter.next_back();
+            }
+            iter.tail
+        };
+
+        let mut pre_split = split_node.resolve_mut().unwrap();
+        let mut post_split = pre_split.get_next_mut().resolve_mut().unwrap();
+        let mut head = self.head.resolve_mut().unwrap();
+        let mut tail = head.get_prev_mut().resolve_mut().unwrap();
+
+        *head.get_prev_mut() = Rawlink::some(pre_split);
+        *pre_split.get_next_mut() = Rawlink::some(head);
+        *post_split.get_prev_mut() = Rawlink::some(tail);
+        *tail.get_next_mut() = Rawlink::some(post_split);
+
+        self.length = at;
+        LinkedList {
+            head: Rawlink::some(post_split),
+            length: len - at,
+            _marker: PhantomData,
+            _marker2: PhantomData
+        }
+    }
+
 }
 
 impl<'a, T, S, L> LinkedList<T, S, L>
@@ -489,51 +547,6 @@ impl<T, S, L> Default for LinkedList<T, S, L>
         LinkedList::new()
     }
 }
-
-// impl<T, L, LP> LinkedList<T, L, LP>
-//     where T: DerefMut,
-//           T::Target: Node<T, L>,
-//           L: Linkable<T> + Default,
-//           LP: DerefMut<Target=Sentinel<T, L>> + Default
-// {
-//     // /// Splits the list into two at the given index. Returns everything after the given index,
-//     // /// including the index.
-//     // ///
-//     // /// # Panics
-//     // ///
-//     // /// Panics if `at > len`.
-//     // ///
-//     // /// This operation should compute in O(n) time.
-//     // pub fn split_off(&mut self, at: usize) -> LinkedList<T, L, LP> {
-//     //     let len = self.len();
-//     //     assert!(at <= len, "Cannot split off at a nonexistent index");
-//     //     if at == 0 {
-//     //         return mem::replace(self, LinkedList::new());
-//     //     } else if at == len {
-//     //         return LinkedList::new();
-//     //     }
-
-//     //     let mut iter = self.iter_mut();
-//     //     // instead of skipping using .skip() (which creates a new struct),
-//     //     // we skip manually so we can access the head field without
-//     //     // depending on implementation details of Skip
-//     //     for _ in 0..at - 1 {
-//     //         iter.next();
-//     //     }
-//     //     let mut split_node = iter.head;
-
-//     //     let mut splitted_list = LinkedList {
-//     //         sentinel: Default::default();
-//     //         length: len - at
-//     //     }
-
-//     //     mem::swap(&mut split_node.resolve().unwrap().next, &mut splitted_list.list_head);
-//     //     self.list_tail = split_node;
-//     //     self.length = at;
-
-//     //     splitted_list
-//     // }
-// }
 
 impl<T, S, L> Clone for LinkedList<T, S, L>
     where T: OwningPointer<Target=S> + Clone,
@@ -1159,65 +1172,65 @@ mod tests {
         check_links(&n);
     }
 
-    // #[test]
-    // fn test_split_off() {
-    //     // singleton
-    //     {
-    //         let mut m: MyIntList = LinkedList::new();
-    //         m.push_back(box MyInt::new(1));
+    #[test]
+    fn test_split_off() {
+        // singleton
+        {
+            let mut m = LinkedList::new();
+            m.push_back(box MyInt::new(1));
 
-    //         let p = m.split_off(0);
-    //         assert_eq!(m.len(), 0);
-    //         assert_eq!(p.len(), 1);
-    //         assert_eq!(p.back().unwrap().i, 1);
-    //         assert_eq!(p.front().unwrap().i, 1);
-    //     }
+            let p = m.split_off(0);
+            assert_eq!(m.len(), 0);
+            assert_eq!(p.len(), 1);
+            assert_eq!(p.back().unwrap().i, 1);
+            assert_eq!(p.front().unwrap().i, 1);
+        }
 
-    //     // not singleton, forwards
-    //     {
-    //         let u = vec![box MyInt::new(1), box MyInt::new(2),
-    //                      box MyInt::new(3), box MyInt::new(4),
-    //                      box MyInt::new(5)];
-    //         let mut m = list_from(&u);
-    //         let mut n = m.split_off(2);
-    //         assert_eq!(m.len(), 2);
-    //         assert_eq!(n.len(), 3);
-    //         for elt in 1..3 {
-    //             assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
-    //         }
-    //         for elt in 3..6 {
-    //             assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
-    //         }
-    //     }
-    //     // not singleton, backwards
-    //     {
-    //         let u = vec![box MyInt::new(1), box MyInt::new(2),
-    //                      box MyInt::new(3), box MyInt::new(4),
-    //                      box MyInt::new(5)];
-    //         let mut m = list_from(&u);
-    //         let mut n = m.split_off(4);
-    //         assert_eq!(m.len(), 4);
-    //         assert_eq!(n.len(), 1);
-    //         for elt in 1..5 {
-    //             assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
-    //         }
-    //         for elt in 5..6 {
-    //             assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
-    //         }
-    //     }
+        // not singleton, forwards
+        {
+            let u = vec![box MyInt::new(1), box MyInt::new(2),
+                         box MyInt::new(3), box MyInt::new(4),
+                         box MyInt::new(5)];
+            let mut m = list_from(&u);
+            let mut n = m.split_off(2);
+            assert_eq!(m.len(), 2);
+            assert_eq!(n.len(), 3);
+            for elt in 1..3 {
+                assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
+            }
+            for elt in 3..6 {
+                assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
+            }
+        }
+        // not singleton, backwards
+        {
+            let u = vec![box MyInt::new(1), box MyInt::new(2),
+                         box MyInt::new(3), box MyInt::new(4),
+                         box MyInt::new(5)];
+            let mut m = list_from(&u);
+            let mut n = m.split_off(4);
+            assert_eq!(m.len(), 4);
+            assert_eq!(n.len(), 1);
+            for elt in 1..5 {
+                assert_eq!(m.pop_front(), Some(box MyInt::new(elt)));
+            }
+            for elt in 5..6 {
+                assert_eq!(n.pop_front(), Some(box MyInt::new(elt)));
+            }
+        }
 
-    //     // no-op on the last index
-    //     {
-    //         let mut m = LinkedList::new();
-    //         m.push_back(box MyInt::new(1));
+        // no-op on the last index
+        {
+            let mut m = LinkedList::new();
+            m.push_back(box MyInt::new(1));
 
-    //         let p = m.split_off(1);
-    //         assert_eq!(m.len(), 1);
-    //         assert_eq!(p.len(), 0);
-    //         assert_eq!(m.back().unwrap().i, 1);
-    //         assert_eq!(m.front().unwrap().i, 1);
-    //     }
-    // }
+            let p = m.split_off(1);
+            assert_eq!(m.len(), 1);
+            assert_eq!(p.len(), 0);
+            assert_eq!(m.back().unwrap().i, 1);
+            assert_eq!(m.front().unwrap().i, 1);
+        }
+    }
 
     #[test]
     fn test_iterator() {
