@@ -21,6 +21,7 @@
 #![cfg_attr(any(not(feature="nostd"),test), feature(alloc))]
 #![cfg_attr(test, feature(collections, hash, test))]
 
+#[cfg(all(feature="nostd",not(test)))] #[macro_use] extern crate core as std;
 #[cfg(all(feature="nostd",not(test)))] #[macro_use] extern crate core;
 
 #[cfg(test)] extern crate test;
@@ -31,12 +32,3 @@ pub use linked_list::LinkedList;
 pub mod linked_list;
 
 mod rawlink;
-
-#[cfg(not(test))]
-#[cfg(feature="nostd")]
-mod std {
-    pub use core::clone;
-    pub use core::cmp;
-    pub use core::fmt;
-    pub use core::option;
-}

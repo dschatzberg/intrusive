@@ -16,41 +16,14 @@
 //! An intrusive double-linked list.
 //!
 //! The 'LinkedList' allows elements to be inserted or removed from either end.
-#[cfg(all(feature="nostd",not(test)))]
-use core::cmp::Ordering;
-#[cfg(any(test,not(feature="nostd")))]
 use std::cmp::Ordering;
-#[cfg(all(feature="nostd",not(test)))]
-use core::default::Default;
-#[cfg(any(test,not(feature="nostd")))]
 use std::default::Default;
-#[cfg(all(feature="nostd",not(test)))]
-use core::fmt;
-#[cfg(any(test,not(feature="nostd")))]
 use std::fmt;
-#[cfg(all(feature="nostd",not(test)))]
-use core::hash::{Hasher, Hash};
-#[cfg(any(test,not(feature="nostd")))]
 use std::hash::{Hasher, Hash};
-#[cfg(all(feature="nostd",not(test)))]
-use core::intrinsics::forget;
-#[cfg(any(test,not(feature="nostd")))]
 use std::intrinsics::forget;
-#[cfg(all(feature="nostd",not(test)))]
-use core::iter::{self,FromIterator,IntoIterator};
-#[cfg(any(test,not(feature="nostd")))]
 use std::iter::{self,FromIterator,IntoIterator};
-#[cfg(all(feature="nostd",not(test)))]
-use core::marker::PhantomData;
-#[cfg(any(test,not(feature="nostd")))]
 use std::marker::PhantomData;
-#[cfg(all(feature="nostd",not(test)))]
-use core::mem;
-#[cfg(any(test,not(feature="nostd")))]
 use std::mem;
-#[cfg(all(feature="nostd",not(test)))]
-use core::ops::DerefMut;
-#[cfg(any(test,not(feature="nostd")))]
 use std::ops::DerefMut;
 #[cfg(all(feature="nostd",not(test)))]
 use core::prelude::*;
