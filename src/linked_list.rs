@@ -53,10 +53,16 @@ pub unsafe trait OwningPointer : DerefMut
 /// A trait that allows a struct to be inserted into a `LinkedList`
 ///
 /// Rather than implement this directly, it is expected to use the
-/// `define_list_link` macro.
-pub unsafe trait Node<L>
+/// `define_list_element` macro.
+pub unsafe trait Node<T, L>
     where L: Linkable<Container=Self>
 {
+    /// Getter for underlying value
+    fn get_val(&self) -> &T;
+
+    /// Getter for mutable underlying value
+    fn get_val_mut(&mut self) -> &mut T;
+
     /// Getter for links
     fn get_links(&self) -> &L;
 
@@ -78,7 +84,7 @@ pub unsafe trait Node<L>
     fn get_prev_mut(&mut self) -> &mut Rawlink<L> {
         self.get_links_mut().get_prev_mut()
     }
- }
+}
 
 /// Link trait allowing a struct to be inserted into a `LinkedList`
 ///
@@ -132,23 +138,18 @@ pub unsafe trait Linkable : Default + Sized
 ///////////////////////
 
 #[macro_export]
-macro_rules! offset_of {
-    ($container:ty : $field:ident) => (unsafe {
-        &(*(0usize as *const $container)).$field as *const _ as usize
-    });
-}
-
-#[macro_export]
-macro_rules! define_list_link {
-    ($link:ident = $container:ty : $field:ident) => (
+macro_rules! define_list_element {
+    ($elt:ident = $container:ty : $link:ident) => (
         declare_list_link!($link);
-        impl_list_link!($link = $container : $field);
-        impl_list_node!($link = $container : $field);
+        declare_list_elt!($elt = $container : $link);
+        impl_list_link!($link = $elt);
+        impl_list_elt!($elt = $container : $link);
     );
-    (pub $link:ident = $container:ty : $field:ident) => (
-        declare_list_link!(pub $link);
-        impl_list_link!($link = $container : $field);
-        impl_list_node!($link = $container : $field);
+    (pub $elt:ident = $container:ty : $link:ident) => (
+        declare_list_link!($link);
+        declare_list_elt!(pub $elt = $container : $link);
+        impl_list_link!($link = $elt);
+        impl_list_elt!($elt = $container : $link);
     );
 }
 
@@ -165,10 +166,22 @@ macro_rules! declare_list_link {
 }
 
 #[macro_export]
+macro_rules! declare_list_elt {
+    ($elt:ident = $container:ty : $link:ident) => (
+        #[derive(Clone, Default, Debug, Hash, Eq, PartialOrd, Ord, PartialEq)]
+        struct $elt($crate::linked_list::NodeImpl<$container, $link>);
+    );
+    (pub $elt:ident = $container:ty : $link:ident) => (
+        #[derive(Clone, Default, Debug, Hash, Eq, PartialOrd, Ord, PartialEq)]
+        pub struct $elt($crate::linked_list::NodeImpl<$container, $link>);
+    );
+}
+
+#[macro_export]
 macro_rules! impl_list_link {
-    ($link:ident = $container:ty : $field:ident) => (
+    ($link:ident = $elt:ident) => (
         unsafe impl $crate::linked_list::Linkable for $link {
-            type Container = $container;
+            type Container = $elt;
 
             #[inline]
             fn get_links(&self) -> &$crate::linked_list::Links<$link> {
@@ -183,24 +196,44 @@ macro_rules! impl_list_link {
 
             #[inline]
             fn offset() -> usize {
-                offset_of!($container : $field)
+                0
             }
         }
     );
 }
 
 #[macro_export]
-macro_rules! impl_list_node {
-    ($link:ident = $container:ty : $field:ident) => (
-        unsafe impl $crate::linked_list::Node<$link> for $container {
+macro_rules! impl_list_elt {
+    ($elt:ident = $container:ty : $link:ident) => (
+        impl $elt {
+            #[inline]
+            fn new(val: $container) -> $elt {
+                $elt($crate::linked_list::NodeImpl {
+                    link: Default::default(),
+                    val: val
+                })
+            }
+        }
+
+        unsafe impl $crate::linked_list::Node<$container, $link> for $elt {
+            #[inline]
+            fn get_val(&self) -> &$container {
+                &self.0.val
+            }
+
+            #[inline]
+            fn get_val_mut(&mut self) -> &mut $container {
+                &mut self.0.val
+            }
+
             #[inline]
             fn get_links(&self) -> &$link {
-                &self.$field
+                &self.0.link
             }
 
             #[inline]
             fn get_links_mut(&mut self) -> &mut $link {
-                &mut self.$field
+                &mut self.0.link
             }
         }
     );
@@ -211,14 +244,15 @@ macro_rules! impl_list_node {
 ////////////////////////
 
 /// An intrusive doubly-linked list
-pub struct LinkedList<T, S, L>
+pub struct LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
           L: Linkable<Container=T::Target>
 {
     length: usize,
     head: Rawlink<L>,
-    _marker: PhantomData<T>,
-    _marker2: PhantomData<S>
+    _marker: PhantomData<P>,
+    _marker2: PhantomData<T>,
+    _marker3: PhantomData<S>
 }
 
 #[derive(Clone, Default, Debug)]
@@ -228,44 +262,53 @@ pub struct Links<L: Linkable>
     next: Rawlink<L>
 }
 
+#[derive(Clone, Default, Debug)]
+pub struct NodeImpl<T, L> {
+    pub link: L,
+    pub val: T
+}
+
 /// An iterator over references to the items of a `LinkedList`
-pub struct Iter<T, L: Linkable<Container=T>> {
+pub struct Iter<P, T, L: Linkable<Container=T>> {
     head: Rawlink<L>,
     tail: Rawlink<L>,
     nelem: usize,
+    _marker: PhantomData<P>
 }
 
 /// An iterator over mutable references to the items of a `LinkedList`
-pub struct IterMut<'a, T, S, L>
+pub struct IterMut<'a, P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
-    list: &'a mut LinkedList<T, S, L>,
+    list: &'a mut LinkedList<P, T, S, L>,
     head: Rawlink<L>,
     tail: Rawlink<L>,
     nelem: usize,
 }
 
-pub struct IntoIter<T, S, L>
+pub struct IntoIter<P, T, S, L>
     where T: OwningPointer<Target=S>,
           L: Linkable<Container=T::Target>
 {
-    list: LinkedList<T, S, L>
+    list: LinkedList<P, T, S, L>
 }
 
 // LinkedList impls
 
-impl<T, S, L> LinkedList<T, S, L>
+impl<P, T, S, L> LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     /// Creates an empty `LinkedList`
     #[inline]
-    pub fn new() -> LinkedList<T, S, L> {
+    pub fn new() -> LinkedList<P, T, S, L> {
         LinkedList { length: 0, head: Rawlink::none(),
-                     _marker: PhantomData, _marker2: PhantomData }
+                     _marker: PhantomData, _marker2: PhantomData,
+                     _marker3: PhantomData}
     }
 
     /// Moves all elements from `other` to the end of the list.
@@ -282,35 +325,25 @@ impl<T, S, L> LinkedList<T, S, L>
     /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl MyInt {
-    /// #   pub fn new(i: i32) -> MyInt {
-    /// #     MyInt { links: Default::default(), i: i}
-    /// #   }
-    /// # }
     /// # fn main() {
     /// let mut a = LinkedList::new();
     /// let mut b = LinkedList::new();
-    /// a.push_back(Box::new(MyInt::new(1)));
-    /// a.push_back(Box::new(MyInt::new(2)));
-    /// b.push_back(Box::new(MyInt::new(3)));
-    /// b.push_back(Box::new(MyInt::new(4)));
+    /// a.push_back(Box::new(MyI32::new(1)));
+    /// a.push_back(Box::new(MyI32::new(2)));
+    /// b.push_back(Box::new(MyI32::new(3)));
+    /// b.push_back(Box::new(MyI32::new(4)));
     ///
     /// a.append(&mut b);
     ///
     /// for e in a.iter() {
-    ///     println!("{}", e.i); // prints 1, then 2, then 3, then 4
+    ///     println!("{}", e); // prints 1, then 2, then 3, then 4
     /// }
     /// println!("{}", b.len()); // prints 0
     /// # }
     /// ```
-    pub fn append(&mut self, other: &mut LinkedList<T, S, L>) {
+    pub fn append(&mut self, other: &mut LinkedList<P, T, S, L>) {
         match self.head.resolve_mut() {
             None => {
                 self.length = other.length;
@@ -338,19 +371,19 @@ impl<T, S, L> LinkedList<T, S, L>
 
     /// Provides a forward iterator.
     #[inline]
-    pub fn iter(&self) -> Iter<S, L> {
+    pub fn iter(&self) -> Iter<P, S, L> {
         let tail = if self.length == 0 {
             Rawlink::none()
         } else {
             *self.head.resolve().unwrap().get_prev()
         };
         Iter{nelem: self.length, head: self.head,
-             tail: tail}
+             tail: tail, _marker: PhantomData}
     }
 
     /// Consumes the list into an iterator yielding elements by value.
     #[inline]
-    pub fn into_iter(self) -> IntoIter<T, S, L> {
+    pub fn into_iter(self) -> IntoIter<P, T, S, L> {
         IntoIter{list: self}
     }
 
@@ -365,23 +398,13 @@ impl<T, S, L> LinkedList<T, S, L>
     /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl MyInt {
-    /// #   pub fn new(i: i32) -> MyInt {
-    /// #     MyInt { links: Default::default(), i: i}
-    /// #   }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert!(dl.is_empty());
     ///
-    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// dl.push_front(Box::new(MyI32::new(1)));
     /// assert!(!dl.is_empty());
     /// # }
     /// ```
@@ -401,28 +424,18 @@ impl<T, S, L> LinkedList<T, S, L>
     /// # use std::default::Default;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl MyInt {
-    /// #   pub fn new(i: i32) -> MyInt {
-    /// #     MyInt { links: Default::default(), i: i}
-    /// #   }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     ///
-    /// dl.push_front(Box::new(MyInt::new(2)));
+    /// dl.push_front(Box::new(MyI32::new(2)));
     /// assert_eq!(dl.len(), 1);
     ///
-    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// dl.push_front(Box::new(MyI32::new(1)));
     /// assert_eq!(dl.len(), 2);
     ///
-    /// dl.push_back(Box::new(MyInt::new(3)));
+    /// dl.push_back(Box::new(MyI32::new(3)));
     /// assert_eq!(dl.len(), 3);
     /// # }
     /// ```
@@ -436,67 +449,18 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     ///
-    /// dl.push_front(Box::new(MyInt::new(2)));
-    /// dl.push_front(Box::new(MyInt::new(1)));
+    /// dl.push_front(Box::new(MyI32::new(2)));
+    /// dl.push_front(Box::new(MyI32::new(1)));
     /// assert_eq!(dl.len(), 2);
-    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    /// assert_eq!(dl.front(), Some(&1));
     ///
     /// dl.clear();
     /// assert_eq!(dl.len(), 0);
@@ -515,70 +479,21 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert_eq!(dl.front(), None);
     ///
-    /// dl.push_front(Box::new(MyInt::new(1)));
-    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    /// dl.push_front(Box::new(MyI32::new(1)));
+    /// assert_eq!(dl.front(), Some(&1));
     /// # }
     #[inline]
-    pub fn front(&self) -> Option<&T::Target> {
-        self.head.resolve().map(|head| unsafe {head.container_of()})
+    pub fn front(&self) -> Option<&P> {
+        self.head.resolve().map(|head| unsafe{head.container_of()}.get_val())
     }
 
     /// Provides a mutable reference to the front element, or `None` if the list
@@ -588,77 +503,30 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert_eq!(dl.front(), None);
     ///
-    /// dl.push_front(Box::new(MyInt::new(1)));
-    /// assert_eq!(dl.front(), Some(&MyInt::new(1)));
+    /// dl.push_front(Box::new(MyI32::new(1)));
+    /// assert_eq!(dl.front(), Some(&1));
     ///
-    /// match unsafe{dl.front_mut()} {
+    /// match dl.front_mut() {
     ///     None => {},
-    ///     Some(x) => x.i = 5,
+    ///     Some(x) => *x = 5,
     /// }
-    /// assert_eq!(dl.front(), Some(&MyInt::new(5)));
+    /// assert_eq!(dl.front(), Some(&5));
     /// # }
     /// ```
     #[inline]
-    pub unsafe fn front_mut(&mut self) -> Option<&mut T::Target> {
-        self.head.resolve_mut().map(|head| head.container_of_mut())
+    pub fn front_mut(&mut self) -> Option<&mut P> {
+        self.head.resolve_mut().map(|head| {
+            unsafe {head.container_of_mut()}.get_val_mut()
+        })
     }
 
     /// Provides a reference to the back element, or `None` if the list is
@@ -668,72 +536,23 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert_eq!(dl.back(), None);
     ///
-    /// dl.push_back(Box::new(MyInt::new(1)));
-    /// assert_eq!(dl.back(), Some(&MyInt::new(1)));
+    /// dl.push_back(Box::new(MyI32::new(1)));
+    /// assert_eq!(dl.back(), Some(&1));
     /// # }
     /// ```
     #[inline]
-    pub fn back(&self) -> Option<&T::Target> {
+    pub fn back(&self) -> Option<&P> {
         self.head.resolve().map(|head| {
-            unsafe{head.get_prev().resolve().unwrap().container_of()}
+            unsafe{head.get_prev().resolve().unwrap().container_of()}.get_val()
         })
     }
 
@@ -744,79 +563,31 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut dl = LinkedList::new();
     /// assert_eq!(dl.back(), None);
     ///
-    /// dl.push_back(Box::new(MyInt::new(1)));
-    /// assert_eq!(dl.back(), Some(&MyInt::new(1)));
+    /// dl.push_back(Box::new(MyI32::new(1)));
+    /// assert_eq!(dl.back(), Some(&1));
     ///
     /// match unsafe {dl.back_mut()} {
     ///     None => {},
-    ///     Some(x) => x.i = 5,
+    ///     Some(x) => *x = 5,
     /// }
-    /// assert_eq!(dl.back(), Some(&MyInt::new(5)));
+    /// assert_eq!(dl.back(), Some(&5));
     /// # }
     /// ```
     #[inline]
-    pub unsafe fn back_mut(&mut self) -> Option<&mut T::Target> {
+    pub fn back_mut(&mut self) -> Option<&mut P> {
         // if pprev is not none, then it points to the link before the tail
         self.head.resolve_mut().map(|head| {
-            head.get_prev_mut().resolve_mut().unwrap().container_of_mut()
+            let tail = head.get_prev_mut().resolve_mut().unwrap();
+            unsafe{tail.container_of_mut()}.get_val_mut()
         })
     }
 
@@ -850,68 +621,19 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut d = LinkedList::new();
     /// assert_eq!(d.pop_front(), None);
     ///
-    /// d.push_front(Box::new(MyInt::new(1)));
-    /// d.push_front(Box::new(MyInt::new(3)));
-    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(3))));
-    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// d.push_front(Box::new(MyI32::new(1)));
+    /// d.push_front(Box::new(MyI32::new(3)));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyI32::new(3))));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyI32::new(1))));
     /// assert_eq!(d.pop_front(), None);
     /// # }
     /// ```
@@ -941,68 +663,19 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut d = LinkedList::new();
     /// assert_eq!(d.pop_front(), None);
     ///
-    /// d.push_front(Box::new(MyInt::new(1)));
-    /// d.push_front(Box::new(MyInt::new(3)));
-    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(3))));
-    /// assert_eq!(d.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// d.push_front(Box::new(MyI32::new(1)));
+    /// d.push_front(Box::new(MyI32::new(3)));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyI32::new(3))));
+    /// assert_eq!(d.pop_front(), Some(Box::new(MyI32::new(1))));
     /// assert_eq!(d.pop_front(), None);
     /// # }
     /// ```
@@ -1028,65 +701,16 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut d = LinkedList::new();
-    /// d.push_back(Box::new(MyInt::new(1)));
-    /// d.push_back(Box::new(MyInt::new(3)));
-    /// assert_eq!(3, unsafe{d.back()}.unwrap().i);
+    /// d.push_back(Box::new(MyI32::new(1)));
+    /// d.push_back(Box::new(MyI32::new(3)));
+    /// assert_eq!(&3, d.back().unwrap());
     /// # }
     /// ```
     pub fn push_back(&mut self, mut elt: T) {
@@ -1112,66 +736,17 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut d = LinkedList::new();
     /// assert_eq!(d.pop_back(), None);
-    /// d.push_back(Box::new(MyInt::new(1)));
-    /// d.push_back(Box::new(MyInt::new(3)));
-    /// assert_eq!(d.pop_back(), Some(Box::new(MyInt::new(3))));
+    /// d.push_back(Box::new(MyI32::new(1)));
+    /// d.push_back(Box::new(MyI32::new(3)));
+    /// assert_eq!(d.pop_back(), Some(Box::new(MyI32::new(3))));
     /// # }
     /// ```
     pub fn pop_back(&mut self) -> Option<T> {
@@ -1196,74 +771,25 @@ impl<T, S, L> LinkedList<T, S, L>
     ///
     /// ```
     /// # #[macro_use] extern crate intrusive_containers;
-    /// # use std::cmp::Ordering;
     /// # use std::default::Default;
-    /// # use std::hash::{self, Hash, Hasher, SipHasher};
-    /// # use std::fmt;
     /// use intrusive_containers::LinkedList;
     ///
-    /// struct MyInt {
-    ///     links: MyLink,
-    ///     i: i32,
-    /// }
+    /// define_list_element!(MyI32 = i32 : MyLink);
     ///
-    /// define_list_link!(MyLink = MyInt : links);
-    ///
-    /// # impl Clone for MyInt {
-    /// #     fn clone(&self) -> MyInt {
-    /// #         MyInt::new(self.i)
-    /// #     }
-    /// # }
-    /// # impl fmt::Debug for MyInt {
-    /// #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    /// #         write!(f, "MyInt({:?})", self.i)
-    /// #     }
-    /// # }
-    /// # impl Hash for MyInt {
-    /// #     fn hash<H: Hasher>(&self, state: &mut H) {
-    /// #         self.i.hash(state);
-    /// #     }
-    /// # }
-    /// # impl PartialEq for MyInt {
-    /// #     fn eq(&self, other: &MyInt) -> bool {
-    /// #         self.i == other.i
-    /// #     }
-    /// # }
-    /// # impl PartialEq<i32> for MyInt {
-    /// #     fn eq(&self, other: &i32) -> bool {
-    /// #         self.i == *other
-    /// #     }
-    /// # }
-    /// # impl Eq for MyInt {}
-    /// # impl PartialOrd for MyInt {
-    /// #     fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-    /// #         self.i.partial_cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl Ord for MyInt {
-    /// #     fn cmp(&self, other: &MyInt) -> Ordering {
-    /// #         self.i.cmp(&other.i)
-    /// #     }
-    /// # }
-    /// # impl MyInt {
-    /// #     pub fn new(i: i32) -> MyInt {
-    /// #         MyInt { links: Default::default(), i: i}
-    /// #     }
-    /// # }
     /// # fn main() {
     /// let mut d = LinkedList::new();
     ///
-    /// d.push_front(Box::new(MyInt::new(1)));
-    /// d.push_front(Box::new(MyInt::new(2)));
-    /// d.push_front(Box::new(MyInt::new(3)));
+    /// d.push_front(Box::new(MyI32::new(1)));
+    /// d.push_front(Box::new(MyI32::new(2)));
+    /// d.push_front(Box::new(MyI32::new(3)));
     ///
     /// let mut splitted = d.split_off(2);
     ///
-    /// assert_eq!(splitted.pop_front(), Some(Box::new(MyInt::new(1))));
+    /// assert_eq!(splitted.pop_front(), Some(Box::new(MyI32::new(1))));
     /// assert_eq!(splitted.pop_front(), None);
     /// # }
     /// ```
-    pub fn split_off(&mut self, at: usize) -> LinkedList<T, S, L> {
+    pub fn split_off(&mut self, at: usize) -> LinkedList<P, T, S, L> {
         let len = self.len();
         assert!(at <= len, "Cannot split off at a nonexistent index");
         if at == 0 {
@@ -1275,7 +801,7 @@ impl<T, S, L> LinkedList<T, S, L>
         // Below, we iterate towards the `i-1`th node, either from the start or the end,
         // depending on which would be faster.
         let mut split_node = if at - 1 <= len - 1 - (at - 1) {
-            let mut iter = unsafe { self.iter_mut() };
+            let mut iter = self.iter_mut();
             // instead of skipping using .skip() (which creates a new struct),
             // we skip manually so we can access the head field without
             // depending on implementation details of Skip
@@ -1285,7 +811,7 @@ impl<T, S, L> LinkedList<T, S, L>
             iter.head
         } else {
             // better off starting from the end
-            let mut iter = unsafe { self.iter_mut() };
+            let mut iter = self.iter_mut();
             for _ in 0..len - 1 - (at - 1) {
                 iter.next_back();
             }
@@ -1307,15 +833,16 @@ impl<T, S, L> LinkedList<T, S, L>
             head: Rawlink::some(post_split),
             length: len - at,
             _marker: PhantomData,
-            _marker2: PhantomData
+            _marker2: PhantomData,
+            _marker3: PhantomData
         }
     }
 
 }
 
-impl<'a, T, S, L> LinkedList<T, S, L>
+impl<'a, P, T, S, L> LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
     /// Provides a forward iterator with mutable references
@@ -1323,7 +850,7 @@ impl<'a, T, S, L> LinkedList<T, S, L>
     /// This operation is marked unsafe because it would be possible to use
     /// `mem::replace` which would invalidate the links
     #[inline]
-    pub unsafe fn iter_mut(&'a mut self) -> IterMut<'a, T, S, L> {
+    pub fn iter_mut(&'a mut self) -> IterMut<'a, P, T, S, L> {
         let tail = if self.length == 0 {
             Rawlink::none()
         } else {
@@ -1338,37 +865,45 @@ impl<'a, T, S, L> LinkedList<T, S, L>
     }
 }
 
-impl<T, S, L> Default for LinkedList<T, S, L>
+impl<P, T, S, L> Default for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     #[inline]
-    fn default() -> LinkedList<T, S, L> {
+    fn default() -> LinkedList<P, T, S, L> {
         LinkedList::new()
     }
 }
 
-impl<T, S, L> Clone for LinkedList<T, S, L>
+impl<P, T, S, L> Clone for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S> + Clone,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
-    fn clone(&self) -> LinkedList<T, S, L> {
-        self.iter().map(|x| {
-            unsafe {
-                let t = T::from_raw(x as *const S as *mut S);
-                let ret = t.clone();
-                t.take();
-                ret
-            }
-        }).collect()
+    fn clone(&self) -> LinkedList<P, T, S, L> {
+        let mut other: LinkedList<P, T, S, L> = Default::default();
+        let mut head = self.head;
+        let mut nelem = self.length;
+        while nelem > 0 {
+            let h = head.resolve_mut().unwrap();
+            nelem -= 1;
+            head = *h.get_next();
+            let t = unsafe {T::from_raw(h.container_of_mut() as *mut S)};
+            let mut new_t = t.clone();
+            new_t.get_next_mut().take();
+            new_t.get_prev_mut().take();
+            other.push_back(new_t);
+            unsafe {t.take()};
+        }
+        other
     }
 }
 
-impl<T, S, L> fmt::Debug for LinkedList<T, S, L>
+impl<P, T, S, L> fmt::Debug for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + fmt::Debug,
+          P: fmt::Debug,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -1383,7 +918,7 @@ impl<T, S, L> fmt::Debug for LinkedList<T, S, L>
     }
 }
 
-impl<T, S, L> Drop for LinkedList<T, S, L>
+impl<P, T, S, L> Drop for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
           L: Linkable<Container=T::Target>
 {
@@ -1401,9 +936,10 @@ impl<T, S, L> Drop for LinkedList<T, S, L>
     }
 }
 
-impl<T, S, L> Hash for LinkedList<T, S, L>
+impl<P, T, S, L> Hash for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + Hash,
+          P: Hash,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -1414,9 +950,9 @@ impl<T, S, L> Hash for LinkedList<T, S, L>
     }
 }
 
-impl<T, S, L> Extend<T> for LinkedList<T, S, L>
+impl<P, T, S, L> Extend<T> for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
@@ -1424,95 +960,101 @@ impl<T, S, L> Extend<T> for LinkedList<T, S, L>
     }
 }
 
-impl<T, S, L> FromIterator<T> for LinkedList<T, S, L>
+impl<P, T, S, L> FromIterator<T> for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> LinkedList<T, S, L> {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> LinkedList<P, T, S, L> {
         let mut ret = LinkedList::new();
         ret.extend(iter);
         ret
     }
 }
 
-impl<T, S, L> IntoIterator for LinkedList<T, S, L>
+impl<P, T, S, L> IntoIterator for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     type Item = T;
-    type IntoIter = IntoIter<T, S, L>;
+    type IntoIter = IntoIter<P, T, S, L>;
 
-    fn into_iter(self) -> IntoIter<T, S, L> {
+    fn into_iter(self) -> IntoIter<P, T, S, L> {
         self.into_iter()
     }
 }
 
-impl<'a, T, S, L> IntoIterator for &'a LinkedList<T, S, L>
+impl<'a, P, T, S, L> IntoIterator for &'a LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
-    type Item = &'a S;
-    type IntoIter = Iter<S, L>;
+    type Item = &'a P;
+    type IntoIter = Iter<P, S, L>;
 
-    fn into_iter(self) -> Iter<S, L> {
+    fn into_iter(self) -> Iter<P, S, L> {
         self.iter()
     }
 }
 
-// impl<'a, T, S, L> IntoIterator for &'a mut LinkedList<T, S, L>
-//     where T: OwningPointer<Target=S> + 'a,
-//           S: Node<L> + 'a,
-//           L: Linkable<Container=T::Target> + 'a
-// {
-//     type Item = &'a mut S;
-//     type IntoIter = IterMut<'a, T, S, L>;
+impl<'a, P, T, S, L> IntoIterator for &'a mut LinkedList<P, T, S, L>
+    where T: OwningPointer<Target=S> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
+          L: Linkable<Container=T::Target> + 'a
+{
+    type Item = &'a mut P;
+    type IntoIter = IterMut<'a, P, T, S, L>;
 
-//     fn into_iter(self) -> IterMut<'a, T, S, L> {
-//         self.iter_mut()
-//     }
-// }
+    fn into_iter(self) -> IterMut<'a, P, T, S, L> {
+        self.iter_mut()
+    }
+}
 
-impl<T, S, L> PartialEq for LinkedList<T, S, L>
+impl<P, T, S, L> PartialEq for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + PartialEq,
+          P: PartialEq,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
-    fn eq(&self, other: &LinkedList<T, S, L>) -> bool {
+    fn eq(&self, other: &LinkedList<P, T, S, L>) -> bool {
         self.len() == other.len() &&
             iter::order::eq(self.iter(), other.iter())
     }
 
-    fn ne(&self, other: &LinkedList<T, S, L>) -> bool {
+    fn ne(&self, other: &LinkedList<P, T, S, L>) -> bool {
         self.len() != other.len() ||
             iter::order::ne(self.iter(), other.iter())
     }
 }
 
-impl<T, S, L> Eq for LinkedList<T, S, L>
+impl<P, T, S, L> Eq for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + Eq,
+          P: Eq,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {}
 
-impl<T, S, L> PartialOrd for LinkedList<T, S, L>
+impl<P, T, S, L> PartialOrd for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + PartialOrd,
+          P: PartialOrd,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
-    fn partial_cmp(&self, other: &LinkedList<T, S, L>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &LinkedList<P, T, S, L>) -> Option<Ordering> {
         iter::order::partial_cmp(self.iter(), other.iter())
     }
 }
 
-impl<T, S, L> Ord for LinkedList<T, S, L>
+impl<P, T, S, L> Ord for LinkedList<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L> + Ord,
+          P: Ord,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
-    fn cmp(&self, other: &LinkedList<T, S, L>) -> Ordering {
+    fn cmp(&self, other: &LinkedList<P, T, S, L>) -> Ordering {
         iter::order::cmp(self.iter(), other.iter())
     }
 }
@@ -1527,31 +1069,61 @@ impl<L: Linkable> Drop for Links<L>
     }
 }
 
+// NodeImpl impls
+
+impl<T: Hash, L> Hash for NodeImpl<T, L> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.val.hash(state);
+    }
+}
+
+impl<T: PartialEq, L> PartialEq for NodeImpl<T, L> {
+    fn eq(&self, other: &NodeImpl<T, L>) -> bool {
+        self.val == other.val
+    }
+}
+
+impl<T: Eq, L> Eq for NodeImpl<T, L> {}
+
+impl<T: PartialOrd, L> PartialOrd for NodeImpl<T, L> {
+    fn partial_cmp(&self, other: &NodeImpl<T, L>) -> Option<Ordering> {
+        self.val.partial_cmp(&other.val)
+    }
+}
+
+impl<T: Ord, L> Ord for NodeImpl<T, L> {
+    fn cmp(&self, other: &NodeImpl<T, L>) -> Ordering {
+        self.val.cmp(&other.val)
+    }
+}
+
 // Iter impls
 
-impl<T, L: Linkable<Container=T>> Clone for Iter<T, L> {
-    fn clone(&self) -> Iter<T, L> {
+impl<P, T, L: Linkable<Container=T>> Clone for Iter<P, T, L> {
+    fn clone(&self) -> Iter<P, T, L> {
         Iter {
             head: self.head,
             tail: self.tail,
             nelem: self.nelem,
+            _marker: PhantomData
         }
     }
 }
 
-impl<'a, T: 'a, L: Linkable<Container=T> + 'a> Iterator for Iter<T, L>
+impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a> Iterator
+    for Iter<P, T, L>
 {
-    type Item = &'a T;
+    type Item = &'a P;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<&'a P> {
         if self.nelem == 0 {
             return None;
         }
         let head = self.head.resolve().unwrap();
         self.nelem -= 1;
         self.head = *head.get_next();
-        let ret = unsafe { head.container_of() };
+        let ret = unsafe { head.container_of() }.get_val();
         Some(ret)
     }
 
@@ -1561,43 +1133,44 @@ impl<'a, T: 'a, L: Linkable<Container=T> + 'a> Iterator for Iter<T, L>
     }
 }
 
-impl<'a, T: 'a, L: Linkable<Container=T> + 'a> DoubleEndedIterator
-    for Iter<T, L>
+impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a>
+    DoubleEndedIterator for Iter<P, T, L>
 {
     #[inline]
-    fn next_back(&mut self) -> Option<&'a T> {
+    fn next_back(&mut self) -> Option<&'a P> {
         if self.nelem == 0 {
             return None;
         }
         let tail = self.tail.resolve().unwrap();
         self.nelem -= 1;
         self.tail = *tail.get_prev();
-        let ret = unsafe { tail.container_of() };
+        let ret = unsafe { tail.container_of() }.get_val();
         Some(ret)
     }
 }
 
-impl<'a, T: 'a, L: Linkable<Container=T> + 'a> ExactSizeIterator
-    for Iter<T, L> {}
+impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a>
+    ExactSizeIterator for Iter<P, T, L> {}
 
 // // IterMut impls
 
-impl<'a, T, S, L> Iterator for IterMut<'a, T, S, L>
+impl<'a, P, T, S, L> Iterator for IterMut<'a, P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
-    type Item = &'a mut S;
+    type Item = &'a mut P;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a mut S> {
+    fn next(&mut self) -> Option<&'a mut P> {
         if self.nelem == 0 {
             return None;
         }
         let head = self.head.resolve_mut().unwrap();
         self.nelem -= 1;
         self.head = *head.get_next();
-        let ret = unsafe { head.container_of_mut() };
+        let ret = unsafe { head.container_of_mut() }.get_val_mut();
         Some(ret)
     }
 
@@ -1607,33 +1180,36 @@ impl<'a, T, S, L> Iterator for IterMut<'a, T, S, L>
     }
 }
 
-impl<'a, T, S, L> DoubleEndedIterator for IterMut<'a, T, S, L>
+impl<'a, P, T, S, L> DoubleEndedIterator for IterMut<'a, P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
     #[inline]
-    fn next_back(&mut self) -> Option<&'a mut S> {
+    fn next_back(&mut self) -> Option<&'a mut P> {
         if self.nelem == 0 {
             return None;
         }
         let tail = self.tail.resolve_mut().unwrap();
         self.nelem -= 1;
         self.tail = *tail.get_prev();
-        let ret = unsafe { tail.container_of_mut() };
+        let ret = unsafe { tail.container_of_mut() }.get_val_mut();
         Some(ret)
     }
 }
 
-impl<'a, T, S, L> ExactSizeIterator for IterMut<'a, T, S, L>
+impl<'a, P, T, S, L> ExactSizeIterator for IterMut<'a, P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {}
 
-impl<'a, T, S, L> IterMut<'a, T, S, L>
+impl<'a, P, T, S, L> IterMut<'a, P, T, S, L>
     where T: OwningPointer<Target=S> + 'a,
-          S: Node<L> + 'a,
+          P: 'a,
+          S: Node<P, L> + 'a,
           L: Linkable<Container=T::Target> + 'a
 {
     /// Inserts `elt` just after the element most recently returned by `.next()`.
@@ -1659,21 +1235,21 @@ impl<'a, T, S, L> IterMut<'a, T, S, L>
 
     /// Provides a reference to the next element, without changing the iterator.
     #[inline]
-    pub fn peek_next(&mut self) -> Option<&'a mut S> {
+    pub fn peek_next(&mut self) -> Option<&'a mut P> {
         if self.nelem == 0 {
             return None
         }
         let head = self.head.resolve_mut().unwrap();
-        let ret = unsafe { head.container_of_mut() };
+        let ret = unsafe { head.container_of_mut() }.get_val_mut();
         Some(ret)
     }
 }
 
 // IntoIter impls
 
-impl<T, S, L> Iterator for IntoIter<T, S, L>
+impl<P, T, S, L> Iterator for IntoIter<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     type Item = T;
@@ -1687,22 +1263,22 @@ impl<T, S, L> Iterator for IntoIter<T, S, L>
     }
 }
 
-impl<T, S, L> DoubleEndedIterator for IntoIter<T, S, L>
+impl<P, T, S, L> DoubleEndedIterator for IntoIter<P, T, S, L>
     where T: OwningPointer<Target=S>,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     #[inline]
     fn next_back(&mut self) -> Option<T> { self.list.pop_back() }
 }
 
-impl<T, S, L> Clone for IntoIter<T, S, L>
+impl<P, T, S, L> Clone for IntoIter<P, T, S, L>
     where T: OwningPointer<Target=S> + Clone,
-          S: Node<L>,
+          S: Node<P, L>,
           L: Linkable<Container=T::Target>
 {
     #[inline]
-    fn clone(&self) -> IntoIter<T, S, L> {
+    fn clone(&self) -> IntoIter<P, T, S, L> {
         IntoIter { list: self.list.clone() }
     }
 }
@@ -1741,74 +1317,18 @@ unsafe impl<T> OwningPointer for Box<T> {
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
-    use std::cmp::Ordering;
     use std::default::Default;
-    use std::hash::{self, Hash, Hasher, SipHasher};
+    use std::hash::{self, Hasher, SipHasher};
     use std::fmt;
     use std::thread;
     use super::{LinkedList, OwningPointer, Node, Linkable};
     use rand;
 
-    struct MyInt {
-        links: MyLink,
-        i: i32,
-    }
+    define_list_element!(MyI32 = i32 : MyLink);
 
-    define_list_link!(MyLink = MyInt : links);
-
-    impl Clone for MyInt {
-        fn clone(&self) -> MyInt {
-            MyInt::new(self.i)
-        }
-    }
-
-    impl fmt::Debug for MyInt {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "MyInt({:?})", self.i)
-        }
-    }
-
-    impl Hash for MyInt {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            self.i.hash(state);
-        }
-    }
-
-    impl PartialEq for MyInt {
-        fn eq(&self, other: &MyInt) -> bool {
-            self.i == other.i
-        }
-    }
-
-    impl PartialEq<i32> for MyInt {
-        fn eq(&self, other: &i32) -> bool {
-            self.i == *other
-        }
-    }
-
-    impl Eq for MyInt {}
-
-    impl PartialOrd for MyInt {
-        fn partial_cmp(&self, other: &MyInt) -> Option<Ordering> {
-            self.i.partial_cmp(&other.i)
-        }
-    }
-
-    impl Ord for MyInt {
-        fn cmp(&self, other: &MyInt) -> Ordering {
-            self.i.cmp(&other.i)
-        }
-    }
-
-    impl MyInt {
-        pub fn new(i: i32) -> MyInt {
-            MyInt { links: Default::default(), i: i}
-        }
-    }
-
-    pub fn check_links<T, S, L>(list: &LinkedList<T, S, L>)
+    pub fn check_links<P, T, S, L>(list: &LinkedList<P, T, S, L>)
         where T: OwningPointer<Target=S>,
-              S: Node<L>,
+              S: Node<P, L>,
               L: Linkable<Container=S> + fmt::Debug,
     {
         let mut len = 0;
@@ -1853,60 +1373,69 @@ mod tests {
         assert_eq!(m.pop_front(), None);
         assert_eq!(m.pop_back(), None);
         assert_eq!(m.pop_front(), None);
-        m.push_front(Box::new(MyInt::new(1)));
-        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(1))));
-        m.push_back(Box::new(MyInt::new(2)));
-        m.push_back(Box::new(MyInt::new(3)));
+        m.push_front(Box::new(MyI32::new(1)));
+        assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(1))));
+        m.push_back(Box::new(MyI32::new(2)));
+        m.push_back(Box::new(MyI32::new(3)));
         assert_eq!(m.len(), 2);
-        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(2))));
-        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(3))));
+        assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(2))));
+        assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(3))));
         assert_eq!(m.len(), 0);
         assert_eq!(m.pop_front(), None);
-        m.push_back(Box::new(MyInt::new(1)));
-        m.push_back(Box::new(MyInt::new(3)));
-        m.push_back(Box::new(MyInt::new(5)));
-        m.push_back(Box::new(MyInt::new(7)));
-        assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(1))));
+        m.push_back(Box::new(MyI32::new(1)));
+        m.push_back(Box::new(MyI32::new(3)));
+        m.push_back(Box::new(MyI32::new(5)));
+        m.push_back(Box::new(MyI32::new(7)));
+        assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(1))));
 
 
         let mut n = LinkedList::new();
-        n.push_front(Box::new(MyInt::new(2)));
-        n.push_front(Box::new(MyInt::new(3)));
+        n.push_front(Box::new(MyI32::new(2)));
+        n.push_front(Box::new(MyI32::new(3)));
         {
-            assert_eq!(n.front().unwrap().i, 3);
-            let x = unsafe {n.front_mut()}.unwrap();
-            assert_eq!(x.i, 3);
-            x.i = 0;
+            assert_eq!(n.front().unwrap(), &3);
+            let x = n.front_mut().unwrap();
+            assert_eq!(x, &mut 3);
+            *x = 0;
         }
         {
-            assert_eq!(n.back().unwrap().i, 2);
-            let y = unsafe{n.back_mut()}.unwrap();
-            assert_eq!(y.i, 2);
-            y.i = 1;
+            assert_eq!(n.back().unwrap(), &2);
+            let y = n.back_mut().unwrap();
+            assert_eq!(y, &mut 2);
+            *y = 1;
         }
-        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(0))));
-        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(1))));
+        assert_eq!(n.pop_front(), Some(Box::new(MyI32::new(0))));
+        assert_eq!(n.pop_front(), Some(Box::new(MyI32::new(1))));
+    }
+
+    #[test]
+    fn test_clone() {
+        let n = generate_test();
+        let m = n.clone();
+        check_links(&n);
+        check_links(&m);
+        assert_eq!(m, n);
     }
 
     #[test]
     fn test_mut_ref() {
-        let mut m = MyInt::new(0);
+        let mut m = MyI32::new(0);
         let mut n = LinkedList::new();
         n.push_front(&mut m);
     }
 
     #[cfg(test)]
-    fn generate_test() -> LinkedList<Box<MyInt>, MyInt, MyLink> {
-        list_from(&[Box::new(MyInt::new(0)), Box::new(MyInt::new(1)),
-                    Box::new(MyInt::new(2)), Box::new(MyInt::new(3)),
-                    Box::new(MyInt::new(4)), Box::new(MyInt::new(5)),
-                    Box::new(MyInt::new(6))])
+    fn generate_test() -> LinkedList<i32, Box<MyI32>, MyI32, MyLink> {
+        list_from(&[Box::new(MyI32::new(0)), Box::new(MyI32::new(1)),
+                    Box::new(MyI32::new(2)), Box::new(MyI32::new(3)),
+                    Box::new(MyI32::new(4)), Box::new(MyI32::new(5)),
+                    Box::new(MyI32::new(6))])
     }
 
     #[cfg(test)]
-    fn list_from<T, S, L>(v: &[T]) -> LinkedList<T, S, L>
+    fn list_from<P, T, S, L>(v: &[T]) -> LinkedList<P, T, S, L>
         where T: OwningPointer<Target=S> + Clone,
-              S: Node<L>,
+              S: Node<P, L>,
               L: Linkable<Container=S>
     {
         v.iter().cloned().collect()
@@ -1916,9 +1445,9 @@ mod tests {
     fn test_append() {
         // Empty to empty
         {
-            let mut m: LinkedList<Box<MyInt>, MyInt, MyLink> =
+            let mut m: LinkedList<i32, Box<MyI32>, MyI32, MyLink> =
                 LinkedList::new();
-            let mut n: LinkedList<Box<MyInt>, MyInt, MyLink> =
+            let mut n: LinkedList<i32, Box<MyI32>, MyI32, MyLink> =
                 LinkedList::new();
             m.append(&mut n);
             check_links(&m);
@@ -1929,11 +1458,11 @@ mod tests {
         {
             let mut m = LinkedList::new();
             let mut n = LinkedList::new();
-            n.push_back(Box::new(MyInt::new(2)));
+            n.push_back(Box::new(MyI32::new(2)));
             m.append(&mut n);
             check_links(&m);
             assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(Box::new(MyInt::new(2))));
+            assert_eq!(m.pop_back(), Some(Box::new(MyI32::new(2))));
             assert_eq!(n.len(), 0);
             check_links(&m);
         }
@@ -1941,22 +1470,22 @@ mod tests {
         {
             let mut m = LinkedList::new();
             let mut n = LinkedList::new();
-            m.push_back(Box::new(MyInt::new(2)));
+            m.push_back(Box::new(MyI32::new(2)));
             m.append(&mut n);
             check_links(&m);
             assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(Box::new(MyInt::new(2))));
+            assert_eq!(m.pop_back(), Some(Box::new(MyI32::new(2))));
             check_links(&m);
         }
 
         // Non-empty to non-empty
-        let v = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
-                     Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
-                     Box::new(MyInt::new(5))];
-        let u = vec![Box::new(MyInt::new(9)), Box::new(MyInt::new(8)),
-                     Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
-                     Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
-                     Box::new(MyInt::new(5))];
+        let v = vec![Box::new(MyI32::new(1)), Box::new(MyI32::new(2)),
+                     Box::new(MyI32::new(3)), Box::new(MyI32::new(4)),
+                     Box::new(MyI32::new(5))];
+        let u = vec![Box::new(MyI32::new(9)), Box::new(MyI32::new(8)),
+                     Box::new(MyI32::new(1)), Box::new(MyI32::new(2)),
+                     Box::new(MyI32::new(3)), Box::new(MyI32::new(4)),
+                     Box::new(MyI32::new(5))];
         let mut m = list_from(&v);
         let mut n = list_from(&u);
         m.append(&mut n);
@@ -1970,9 +1499,9 @@ mod tests {
         assert_eq!(n.len(), 0);
         // let's make sure it's working properly, since we
         // did some direct changes to private members
-        n.push_back(Box::new(MyInt::new(3)));
+        n.push_back(Box::new(MyI32::new(3)));
         assert_eq!(n.len(), 1);
-        assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(3))));
+        assert_eq!(n.pop_front(), Some(Box::new(MyI32::new(3))));
         check_links(&n);
     }
 
@@ -1981,58 +1510,58 @@ mod tests {
         // singleton
         {
             let mut m = LinkedList::new();
-            m.push_back(Box::new(MyInt::new(1)));
+            m.push_back(Box::new(MyI32::new(1)));
 
             let p = m.split_off(0);
             assert_eq!(m.len(), 0);
             assert_eq!(p.len(), 1);
-            assert_eq!(p.back().unwrap().i, 1);
-            assert_eq!(p.front().unwrap().i, 1);
+            assert_eq!(p.back().unwrap(), &1);
+            assert_eq!(p.front().unwrap(), &1);
         }
 
         // not singleton, forwards
         {
-            let u = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
-                         Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
-                         Box::new(MyInt::new(5))];
+            let u = vec![Box::new(MyI32::new(1)), Box::new(MyI32::new(2)),
+                         Box::new(MyI32::new(3)), Box::new(MyI32::new(4)),
+                         Box::new(MyI32::new(5))];
             let mut m = list_from(&u);
             let mut n = m.split_off(2);
             assert_eq!(m.len(), 2);
             assert_eq!(n.len(), 3);
             for elt in 1..3 {
-                assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(elt))));
+                assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(elt))));
             }
             for elt in 3..6 {
-                assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(elt))));
+                assert_eq!(n.pop_front(), Some(Box::new(MyI32::new(elt))));
             }
         }
         // not singleton, backwards
         {
-            let u = vec![Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
-                         Box::new(MyInt::new(3)), Box::new(MyInt::new(4)),
-                         Box::new(MyInt::new(5))];
+            let u = vec![Box::new(MyI32::new(1)), Box::new(MyI32::new(2)),
+                         Box::new(MyI32::new(3)), Box::new(MyI32::new(4)),
+                         Box::new(MyI32::new(5))];
             let mut m = list_from(&u);
             let mut n = m.split_off(4);
             assert_eq!(m.len(), 4);
             assert_eq!(n.len(), 1);
             for elt in 1..5 {
-                assert_eq!(m.pop_front(), Some(Box::new(MyInt::new(elt))));
+                assert_eq!(m.pop_front(), Some(Box::new(MyI32::new(elt))));
             }
             for elt in 5..6 {
-                assert_eq!(n.pop_front(), Some(Box::new(MyInt::new(elt))));
+                assert_eq!(n.pop_front(), Some(Box::new(MyI32::new(elt))));
             }
         }
 
         // no-op on the last index
         {
             let mut m = LinkedList::new();
-            m.push_back(Box::new(MyInt::new(1)));
+            m.push_back(Box::new(MyI32::new(1)));
 
             let p = m.split_off(1);
             assert_eq!(m.len(), 1);
             assert_eq!(p.len(), 0);
-            assert_eq!(m.back().unwrap().i, 1);
-            assert_eq!(m.front().unwrap().i, 1);
+            assert_eq!(m.back().unwrap(), &1);
+            assert_eq!(m.front().unwrap(), &1);
         }
     }
 
@@ -2040,14 +1569,14 @@ mod tests {
     fn test_iterator() {
         let m = generate_test();
         for (i, elt) in m.iter().enumerate() {
-            assert_eq!(i as i32, elt.i);
+            assert_eq!(i as i32, *elt);
         }
         let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
-        n.push_front(Box::new(MyInt::new(4)));
+        n.push_front(Box::new(MyI32::new(4)));
         let mut it = n.iter();
         assert_eq!(it.size_hint(), (1, Some(1)));
-        assert_eq!(it.next().unwrap().i, 4);
+        assert_eq!(it.next().unwrap(), &4);
         assert_eq!(it.size_hint(), (0, Some(0)));
         assert_eq!(it.next(), None);
     }
@@ -2055,9 +1584,9 @@ mod tests {
     #[test]
     fn test_iterator_clone() {
         let mut n = LinkedList::new();
-        n.push_back(Box::new(MyInt::new(2)));
-        n.push_back(Box::new(MyInt::new(3)));
-        n.push_back(Box::new(MyInt::new(4)));
+        n.push_back(Box::new(MyI32::new(2)));
+        n.push_back(Box::new(MyI32::new(3)));
+        n.push_back(Box::new(MyI32::new(4)));
         let mut it = n.iter();
         it.next();
         let mut jt = it.clone();
@@ -2070,16 +1599,16 @@ mod tests {
     fn test_iterator_double_end() {
         let mut n = LinkedList::new();
         assert_eq!(n.iter().next(), None);
-        n.push_front(Box::new(MyInt::new(4)));
-        n.push_front(Box::new(MyInt::new(5)));
-        n.push_front(Box::new(MyInt::new(6)));
+        n.push_front(Box::new(MyI32::new(4)));
+        n.push_front(Box::new(MyI32::new(5)));
+        n.push_front(Box::new(MyI32::new(6)));
         let mut it = n.iter();
         assert_eq!(it.size_hint(), (3, Some(3)));
-        assert_eq!(it.next().unwrap().i, 6);
+        assert_eq!(it.next().unwrap(), &6);
         assert_eq!(it.size_hint(), (2, Some(2)));
-        assert_eq!(it.next_back().unwrap().i, 4);
+        assert_eq!(it.next_back().unwrap(), &4);
         assert_eq!(it.size_hint(), (1, Some(1)));
-        assert_eq!(it.next_back().unwrap().i, 5);
+        assert_eq!(it.next_back().unwrap(), &5);
         assert_eq!(it.next_back(), None);
         assert_eq!(it.next(), None);
     }
@@ -2088,14 +1617,14 @@ mod tests {
     fn test_rev_iter() {
         let m = generate_test();
         for (i, elt) in m.iter().rev().enumerate() {
-            assert_eq!((6 - i) as i32, elt.i);
+            assert_eq!((6 - i) as i32, *elt);
         }
         let mut n = LinkedList::new();
         assert_eq!(n.iter().rev().next(), None);
-        n.push_front(Box::new(MyInt::new(4)));
+        n.push_front(Box::new(MyI32::new(4)));
         let mut it = n.iter().rev();
         assert_eq!(it.size_hint(), (1, Some(1)));
-        assert_eq!(it.next().unwrap().i, 4);
+        assert_eq!(it.next().unwrap(), &4);
         assert_eq!(it.size_hint(), (0, Some(0)));
         assert_eq!(it.next(), None);
     }
@@ -2104,16 +1633,16 @@ mod tests {
     fn test_mut_iter() {
         let mut m = generate_test();
         let mut len = m.len();
-        for (i, elt) in unsafe {m.iter_mut()}.enumerate() {
-            assert_eq!(i as i32, elt.i);
+        for (i, elt) in m.iter_mut().enumerate() {
+            assert_eq!(i as i32, *elt);
             len -= 1;
         }
         assert_eq!(len, 0);
         let mut n = LinkedList::new();
-        assert!(unsafe{n.iter_mut()}.next().is_none());
-        n.push_front(Box::new(MyInt::new(4)));
-        n.push_back(Box::new(MyInt::new(5)));
-        let mut it = unsafe { n.iter_mut() };
+        assert!(n.iter_mut().next().is_none());
+        n.push_front(Box::new(MyI32::new(4)));
+        n.push_back(Box::new(MyI32::new(5)));
+        let mut it = n.iter_mut();
         assert_eq!(it.size_hint(), (2, Some(2)));
         assert!(it.next().is_some());
         assert!(it.next().is_some());
@@ -2124,87 +1653,87 @@ mod tests {
     #[test]
     fn test_iterator_mut_double_end() {
         let mut n = LinkedList::new();
-        assert!(unsafe{n.iter_mut()}.next_back().is_none());
-        n.push_front(Box::new(MyInt::new(4)));
-        n.push_front(Box::new(MyInt::new(5)));
-        n.push_front(Box::new(MyInt::new(6)));
-        let mut it = unsafe{n.iter_mut()};
+        assert!(n.iter_mut().next_back().is_none());
+        n.push_front(Box::new(MyI32::new(4)));
+        n.push_front(Box::new(MyI32::new(5)));
+        n.push_front(Box::new(MyI32::new(6)));
+        let mut it = n.iter_mut();
         assert_eq!(it.size_hint(), (3, Some(3)));
-        assert_eq!(it.next().unwrap().i, 6);
+        assert_eq!(it.next().unwrap(), &6);
         assert_eq!(it.size_hint(), (2, Some(2)));
-        assert_eq!(it.next_back().unwrap().i, 4);
+        assert_eq!(it.next_back().unwrap(), &4);
         assert_eq!(it.size_hint(), (1, Some(1)));
-        assert_eq!(it.next_back().unwrap().i, 5);
+        assert_eq!(it.next_back().unwrap(), &5);
         assert!(it.next_back().is_none());
         assert!(it.next().is_none());
     }
 
     #[test]
     fn test_insert_next() {
-        let mut m = list_from(&[Box::new(MyInt::new(0)),
-                                Box::new(MyInt::new(2)),
-                                Box::new(MyInt::new(4)),
-                                Box::new(MyInt::new(6)),
-                                Box::new(MyInt::new(8))]);
+        let mut m = list_from(&[Box::new(MyI32::new(0)),
+                                Box::new(MyI32::new(2)),
+                                Box::new(MyI32::new(4)),
+                                Box::new(MyI32::new(6)),
+                                Box::new(MyI32::new(8))]);
         let len = m.len();
         {
-            let mut it = unsafe {m.iter_mut()};
-            it.insert_next(Box::new(MyInt::new(-2)));
+            let mut it = m.iter_mut();
+            it.insert_next(Box::new(MyI32::new(-2)));
             loop {
                 match it.next() {
                     None => break,
                     Some(elt) => {
-                        it.insert_next(Box::new(MyInt::new(elt.i + 1)));
+                        it.insert_next(Box::new(MyI32::new(*elt + 1)));
                         match it.peek_next() {
-                            Some(x) => assert_eq!(x.i, elt.i + 2),
-                            None => assert_eq!(8, elt.i),
+                            Some(x) => assert_eq!(*x, *elt + 2),
+                            None => assert_eq!(8, *elt),
                         }
                     }
                 }
             }
-            it.insert_next(Box::new(MyInt::new(0)));
-            it.insert_next(Box::new(MyInt::new(1)));
+            it.insert_next(Box::new(MyI32::new(0)));
+            it.insert_next(Box::new(MyI32::new(1)));
         }
         check_links(&m);
         assert_eq!(m.len(), 3 + len * 2);
         assert_eq!(m.into_iter().collect::<Vec<_>>(),
-                   [Box::new(MyInt::new(-2)),
-                    Box::new(MyInt::new(0)),
-                    Box::new(MyInt::new(1)),
-                    Box::new(MyInt::new(2)),
-                    Box::new(MyInt::new(3)),
-                    Box::new(MyInt::new(4)),
-                    Box::new(MyInt::new(5)),
-                    Box::new(MyInt::new(6)),
-                    Box::new(MyInt::new(7)),
-                    Box::new(MyInt::new(8)),
-                    Box::new(MyInt::new(9)),
-                    Box::new(MyInt::new(0)),
-                    Box::new(MyInt::new(1))]);
+                   [Box::new(MyI32::new(-2)),
+                    Box::new(MyI32::new(0)),
+                    Box::new(MyI32::new(1)),
+                    Box::new(MyI32::new(2)),
+                    Box::new(MyI32::new(3)),
+                    Box::new(MyI32::new(4)),
+                    Box::new(MyI32::new(5)),
+                    Box::new(MyI32::new(6)),
+                    Box::new(MyI32::new(7)),
+                    Box::new(MyI32::new(8)),
+                    Box::new(MyI32::new(9)),
+                    Box::new(MyI32::new(0)),
+                    Box::new(MyI32::new(1))]);
     }
 
     #[test]
     fn test_mut_rev_iter() {
         let mut m = generate_test();
-        for (i, elt) in unsafe{m.iter_mut()}.rev().enumerate() {
-            assert_eq!((6 - i) as i32, elt.i);
+        for (i, elt) in m.iter_mut().rev().enumerate() {
+            assert_eq!((6 - i) as i32, *elt);
         }
         let mut n = LinkedList::new();
-        assert!(unsafe{n.iter_mut()}.rev().next().is_none());
-        n.push_front(Box::new(MyInt::new(4)));
-        let mut it = unsafe{n.iter_mut()}.rev();
+        assert!(n.iter_mut().rev().next().is_none());
+        n.push_front(Box::new(MyI32::new(4)));
+        let mut it = n.iter_mut().rev();
         assert!(it.next().is_some());
         assert!(it.next().is_none());
     }
 
     #[test]
     fn test_send() {
-        let n = list_from(&[Box::new(MyInt::new(1)), Box::new(MyInt::new(2)),
-                            Box::new(MyInt::new(3))]);
+        let n = list_from(&[Box::new(MyI32::new(1)), Box::new(MyI32::new(2)),
+                            Box::new(MyI32::new(3))]);
         thread::spawn(move || {
             check_links(&n);
-            let a = list_from(&[Box::new(MyInt::new(1)),Box::new(MyInt::new(2)),
-                                Box::new(MyInt::new(3))]);
+            let a = list_from(&[Box::new(MyI32::new(1)),Box::new(MyI32::new(2)),
+                                Box::new(MyI32::new(3))]);
             assert_eq!(a, n);
         }).join().ok().unwrap();
     }
@@ -2214,16 +1743,16 @@ mod tests {
         let mut n = list_from(&[]);
         let mut m = list_from(&[]);
         assert!(n == m);
-        n.push_front(Box::new(MyInt::new(1)));
+        n.push_front(Box::new(MyI32::new(1)));
         assert!(n != m);
-        m.push_back(Box::new(MyInt::new(1)));
+        m.push_back(Box::new(MyI32::new(1)));
         assert!(n == m);
 
-        let n = list_from(&[Box::new(MyInt::new(2)), Box::new(MyInt::new(3)),
-                            Box::new(MyInt::new(4))]);
-        let m = list_from(&[Box::new(MyInt::new(1)),
-                            Box::new(MyInt::new(2)),
-                            Box::new(MyInt::new(3))]);
+        let n = list_from(&[Box::new(MyI32::new(2)), Box::new(MyI32::new(3)),
+                            Box::new(MyI32::new(4))]);
+        let m = list_from(&[Box::new(MyI32::new(1)),
+                            Box::new(MyI32::new(2)),
+                            Box::new(MyI32::new(3))]);
         assert!(n != m);
     }
 
@@ -2234,13 +1763,13 @@ mod tests {
 
       assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
 
-      x.push_back(Box::new(MyInt::new(1)));
-      x.push_back(Box::new(MyInt::new(2)));
-      x.push_back(Box::new(MyInt::new(3)));
+      x.push_back(Box::new(MyI32::new(1)));
+      x.push_back(Box::new(MyI32::new(2)));
+      x.push_back(Box::new(MyI32::new(3)));
 
-      y.push_front(Box::new(MyInt::new(3)));
-      y.push_front(Box::new(MyInt::new(2)));
-      y.push_front(Box::new(MyInt::new(1)));
+      y.push_front(Box::new(MyI32::new(3)));
+      y.push_front(Box::new(MyI32::new(2)));
+      y.push_front(Box::new(MyI32::new(1)));
 
       assert!(hash::hash::<_, SipHasher>(&x) == hash::hash::<_, SipHasher>(&y));
     }
@@ -2248,9 +1777,9 @@ mod tests {
     #[test]
     fn test_ord() {
         let n = list_from(&[]);
-        let m = list_from(&[Box::new(MyInt::new(1)),
-                            Box::new(MyInt::new(2)),
-                            Box::new(MyInt::new(3))]);
+        let m = list_from(&[Box::new(MyI32::new(1)),
+                            Box::new(MyI32::new(2)),
+                            Box::new(MyI32::new(3))]);
         assert!(n < m);
         assert!(m > n);
         assert!(n <= n);
@@ -2285,12 +1814,12 @@ mod tests {
                     }
                 }
                 2 | 4 =>  {
-                    m.push_front(Box::new(MyInt::new(-i)));
-                    v.insert(0, Box::new(MyInt::new(-i)));
+                    m.push_front(Box::new(MyI32::new(-i)));
+                    v.insert(0, Box::new(MyI32::new(-i)));
                 }
                 3 | 5 | _ => {
-                    m.push_back(Box::new(MyInt::new(i)));
-                    v.push(Box::new(MyInt::new(i)));
+                    m.push_back(Box::new(MyI32::new(i)));
+                    v.push(Box::new(MyI32::new(i)));
                 }
             }
         }
@@ -2300,7 +1829,7 @@ mod tests {
         let mut i = 0;
         for (ref a, ref b) in m.into_iter().zip(v.iter()) {
             i += 1;
-            assert_eq!(a.i, b.i);
+            assert_eq!(a, *b);
         }
         assert_eq!(i, v.len());
     }
