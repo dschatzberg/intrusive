@@ -269,11 +269,11 @@ pub struct NodeImpl<T, L> {
 }
 
 /// An iterator over references to the items of a `LinkedList`
-pub struct Iter<P, T, L: Linkable<Container=T>> {
+pub struct Iter<'a, P: 'a, T, L: Linkable<Container=T>> {
     head: Rawlink<L>,
     tail: Rawlink<L>,
     nelem: usize,
-    _marker: PhantomData<P>
+    _marker: PhantomData<&'a P>
 }
 
 /// An iterator over mutable references to the items of a `LinkedList`
@@ -371,7 +371,7 @@ impl<P, T, S, L> LinkedList<P, T, S, L>
 
     /// Provides a forward iterator.
     #[inline]
-    pub fn iter(&self) -> Iter<P, S, L> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, P, S, L> {
         let tail = if self.length == 0 {
             Rawlink::none()
         } else {
@@ -992,9 +992,9 @@ impl<'a, P, T, S, L> IntoIterator for &'a LinkedList<P, T, S, L>
           L: Linkable<Container=T::Target> + 'a
 {
     type Item = &'a P;
-    type IntoIter = Iter<P, S, L>;
+    type IntoIter = Iter<'a, P, S, L>;
 
-    fn into_iter(self) -> Iter<P, S, L> {
+    fn into_iter(self) -> Iter<'a, P, S, L> {
         self.iter()
     }
 }
@@ -1099,19 +1099,19 @@ impl<T: Ord, L> Ord for NodeImpl<T, L> {
 
 // Iter impls
 
-impl<P, T, L: Linkable<Container=T>> Clone for Iter<P, T, L> {
-    fn clone(&self) -> Iter<P, T, L> {
+impl<'a, P, T, L: Linkable<Container=T>> Clone for Iter<'a P, T, L> {
+    fn clone(&self) -> Iter<'a, P, T, L> {
         Iter {
             head: self.head,
             tail: self.tail,
             nelem: self.nelem,
-            _marker: PhantomData
+            _marker: PhantomData,
         }
     }
 }
 
 impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a> Iterator
-    for Iter<P, T, L>
+    for Iter<'a, P, T, L>
 {
     type Item = &'a P;
 
@@ -1134,7 +1134,7 @@ impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a> Iterator
 }
 
 impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a>
-    DoubleEndedIterator for Iter<P, T, L>
+    DoubleEndedIterator for Iter<'a, P, T, L>
 {
     #[inline]
     fn next_back(&mut self) -> Option<&'a P> {
@@ -1150,7 +1150,7 @@ impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a>
 }
 
 impl<'a, P: 'a, T: Node<P, L> + 'a, L: Linkable<Container=T> + 'a>
-    ExactSizeIterator for Iter<P, T, L> {}
+    ExactSizeIterator for Iter<'a, P, T, L> {}
 
 // // IterMut impls
 
