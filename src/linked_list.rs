@@ -17,11 +17,10 @@
 //!
 //! The 'LinkedList' allows elements to be inserted or removed from either end.
 use std::cmp::Ordering;
-use std::default::Default;
 use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::intrinsics::forget;
-use std::iter::{self,FromIterator,IntoIterator};
+use std::iter::{self,FromIterator};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::DerefMut;
@@ -1317,7 +1316,6 @@ unsafe impl<T> OwningPointer for Box<T> {
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
-    use std::default::Default;
     use std::hash::{self, Hasher, SipHasher};
     use std::fmt;
     use std::thread;

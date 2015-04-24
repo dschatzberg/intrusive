@@ -24,7 +24,6 @@
 // except according to those terms.
 #[cfg(all(feature="nostd",not(test)))]
 use core::prelude::*;
-use std::default::Default;
 use std::mem;
 use std::ptr;
 
