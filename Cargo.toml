@@ -13,4 +13,4 @@ documentation = "https://dschatzberg.github.io/intrusive/intrusive_containers/in
 nostd = []
 
 [dev-dependencies]
-rand = "0.3"
+rand = "0.3.8"
