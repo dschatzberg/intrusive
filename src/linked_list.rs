@@ -1098,7 +1098,7 @@ impl<T: Ord, L> Ord for NodeImpl<T, L> {
 
 // Iter impls
 
-impl<'a, P, T, L: Linkable<Container=T>> Clone for Iter<'a P, T, L> {
+impl<'a, P, T, L: Linkable<Container=T>> Clone for Iter<'a, P, T, L> {
     fn clone(&self) -> Iter<'a, P, T, L> {
         Iter {
             head: self.head,
