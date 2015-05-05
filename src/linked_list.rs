@@ -53,7 +53,7 @@ pub unsafe trait OwningPointer : DerefMut
 ///
 /// Rather than implement this directly, it is expected to use the
 /// `define_list_element` macro.
-pub unsafe trait Node<T, L>
+pub unsafe trait Node<T, L> : Sized
     where L: Linkable<Container=Self>
 {
     /// Getter for underlying value
@@ -91,7 +91,7 @@ pub unsafe trait Node<T, L>
 /// check_links()
 pub unsafe trait Linkable : Default + Sized
 {
-    type Container: ?Sized;
+    type Container;
 
     fn get_links(&self) -> &Links<Self>;
     fn get_links_mut(&mut self) -> &mut Links<Self>;
