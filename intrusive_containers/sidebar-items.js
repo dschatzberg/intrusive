@@ -1,0 +1,1 @@
+initSidebarItems({"macro":[["declare_list_elt!",""],["declare_list_link!",""],["define_list_element!",""],["impl_list_elt!",""],["impl_list_link!",""]],"mod":[["linked_list","An intrusive double-linked list."]]});

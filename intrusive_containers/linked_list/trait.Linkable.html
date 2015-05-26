@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Linkable` trait in crate `intrusive_containers`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Linkable">
+
+    <title>intrusive_containers::linked_list::Linkable - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='../index.html'>intrusive_containers</a>::<wbr><a href='index.html'>linked_list</a></p><script>window.sidebarCurrent = {name: 'Linkable', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../index.html'>intrusive_containers</a>::<wbr><a href='index.html'>linked_list</a>::<wbr><a class='trait' href=''>Linkable</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-121' class='srclink' href='../../src/intrusive_containers/linked_list.rs.html#92-133' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub unsafe trait Linkable: <a class='trait' href='http://doc.rust-lang.org/nightly/core/default/trait.Default.html' title='core::default::Default'>Default</a> + <a class='trait' href='http://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a> {
+    type Container;
+    fn <a href='#tymethod.get_links' class='fnname'>get_links</a>(&amp;self) -&gt; &amp;<a class='struct' href='../../intrusive_containers/linked_list/struct.Links.html' title='intrusive_containers::linked_list::Links'>Links</a>&lt;Self&gt;;
+    fn <a href='#tymethod.get_links_mut' class='fnname'>get_links_mut</a>(&amp;mut self) -&gt; &amp;mut <a class='struct' href='../../intrusive_containers/linked_list/struct.Links.html' title='intrusive_containers::linked_list::Links'>Links</a>&lt;Self&gt;;
+    fn <a href='#tymethod.offset' class='fnname'>offset</a>() -&gt; <a href='http://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>;
+
+    fn <a href='#method.get_next' class='fnname'>get_next</a>&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span> { ... }
+    fn <a href='#method.get_next_mut' class='fnname'>get_next_mut</a>&lt;'a&gt;(&amp;'a mut self) -&gt; &amp;'a mut Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span> { ... }
+    fn <a href='#method.get_prev' class='fnname'>get_prev</a>&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span> { ... }
+    fn <a href='#method.get_prev_mut' class='fnname'>get_prev_mut</a>&lt;'a&gt;(&amp;'a mut self) -&gt; &amp;'a mut Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span> { ... }
+    unsafe fn <a href='#method.container_of' class='fnname'>container_of</a>(&amp;self) -&gt; &amp;Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a> { ... }
+    unsafe fn <a href='#method.container_of_mut' class='fnname'>container_of_mut</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a> { ... }
+    fn <a href='#method.check_links' class='fnname'>check_links</a>(&amp;self) { ... }
+}</pre><div class='docblock'><p>Link trait allowing a struct to be inserted into a <code>LinkedList</code></p>
+
+<p>The trait is unsafe because any implementation must impl Drop to call
+check_links()</p>
+</div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Container' class='method stab '><code>type Container</code></h3></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.get_links' class='method stab '><code>fn <a href='#tymethod.get_links' class='fnname'>get_links</a>(&amp;self) -&gt; &amp;<a class='struct' href='../../intrusive_containers/linked_list/struct.Links.html' title='intrusive_containers::linked_list::Links'>Links</a>&lt;Self&gt;</code></h3><h3 id='tymethod.get_links_mut' class='method stab '><code>fn <a href='#tymethod.get_links_mut' class='fnname'>get_links_mut</a>(&amp;mut self) -&gt; &amp;mut <a class='struct' href='../../intrusive_containers/linked_list/struct.Links.html' title='intrusive_containers::linked_list::Links'>Links</a>&lt;Self&gt;</code></h3><h3 id='tymethod.offset' class='method stab '><code>fn <a href='#tymethod.offset' class='fnname'>offset</a>() -&gt; <a href='http://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a></code></h3></div>
+            <h2 id='provided-methods'>Provided Methods</h2>
+            <div class='methods'>
+        <h3 id='method.get_next' class='method stab '><code>fn <a href='#method.get_next' class='fnname'>get_next</a>&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span></code></h3><h3 id='method.get_next_mut' class='method stab '><code>fn <a href='#method.get_next_mut' class='fnname'>get_next_mut</a>&lt;'a&gt;(&amp;'a mut self) -&gt; &amp;'a mut Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span></code></h3><h3 id='method.get_prev' class='method stab '><code>fn <a href='#method.get_prev' class='fnname'>get_prev</a>&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span></code></h3><h3 id='method.get_prev_mut' class='method stab '><code>fn <a href='#method.get_prev_mut' class='fnname'>get_prev_mut</a>&lt;'a&gt;(&amp;'a mut self) -&gt; &amp;'a mut Rawlink&lt;Self&gt; <span class='where'>where Self: 'a, Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a>: 'a</span></code></h3><h3 id='method.container_of' class='method stab '><code>unsafe fn <a href='#method.container_of' class='fnname'>container_of</a>(&amp;self) -&gt; &amp;Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a></code></h3><h3 id='method.container_of_mut' class='method stab '><code>unsafe fn <a href='#method.container_of_mut' class='fnname'>container_of_mut</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../../intrusive_containers/linked_list/trait.Linkable.html' title='intrusive_containers::linked_list::Linkable'>Container</a></code></h3><h3 id='method.check_links' class='method stab '><code>fn <a href='#method.check_links' class='fnname'>check_links</a>(&amp;self)</code></h3></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../../implementors/intrusive_containers/linked_list/trait.Linkable.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+            <p>
+                Search functions by type signature (e.g.
+                <code>vec -> usize</code>)
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "intrusive_containers";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>
